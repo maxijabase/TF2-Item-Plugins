@@ -3,6 +3,7 @@
 #include "tf2itemplugin/tf2itemplugin_weapon_sqlite.sp"
 #include "tf2itemplugin/tf2itemplugin_weapon_data.sp"
 #include "tf2itemplugin/tf2itemplugin_weapon_menus.sp"
+#include "tf2itemplugin/tf2itemplugin_weapon_requests.sp"
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -78,8 +79,14 @@ public Action OnEndTouchSpawnRoom(int entity, int other)
 
 public void OnPluginStart()
 {
-	g_cvar_weapons_onlySpawn			 = CreateConVar("tf2items_weapons_spawnonly", "0",
+	g_cvar_weapons_onlySpawn			 = CreateConVar("tf2items_weapons_spawnonly", "0.0",
 														"If enabled, weapon changes are only allowed when the player is within a spawn room.", 0, true, 0.0, true, 1.0);
+
+	g_cvar_weapons_paintKitsUrl			 = CreateConVar("tf2items_weapons_paintkits_url", "https://raw.githubusercontent.com/punteroo/TF2-Item-Plugins/feat/rewrite/tf2_protos.json",
+														"The URL to the JSON file containing the War Paints and their IDs. Must be a valid JSON array.");
+
+	g_cvar_weapons_searchTimeout		 = CreateConVar("tf2items_weapons_search_timeout", "20.0",
+														"The amount of time in seconds to wait for a search to complete before timing out.", 0, true, 5.0, true, 60.0);
 
 	// Load the "Regenerate" SDK call.
 	hRegen								 = TF2ItemPlugin_LoadRegenerateSDK();
@@ -103,6 +110,14 @@ public void OnMapStart()
 {
 	// Attach hooks to the spawn room entities.
 	TF2ItemPlugin_AttachSpawnRoomHooks();
+
+	// Setup an HTTP request to obtain latest paint kit information.
+	char url[512];
+	g_cvar_weapons_paintKitsUrl.GetString(url, sizeof(url));
+
+	PrintToServer("[TF2ItemPlugin - Weapons] Requesting paint kit data from %s", url);
+
+	TF2ItemPlugin_RequestPaintKitData(url);
 }
 
 public void OnClientAuthorized(int client)
@@ -130,37 +145,16 @@ public Action CMD_TF2ItemPlugin_WeaponManager(int client, int args)
 
 void		Print_Slot(int client, int class, int slot)
 {
-	PrintToConsole(client, "Slot %d:\n" ...
-							"Client ID: %d\n" ...
-							"Class ID: %d\n" ...
-							"Slot ID: %d\n" ...
-							"Active Override: %d\n" ...
-							"Weapon Def Index: %d\n" ...
-							"Stock Def Index: %d\n" ...
-							"Quality: %d\n" ...
-							"Level: %d\n" ...
-							"Australium: %d\n" ...
-							"Festive: %d\n" ...
-							"Unusual Effect: %d\n" ...
-							"War Paint ID: %d\n" ...
-							"War Paint Wear: %d\n" ...
-							"- Killstreak:\n" ...
-							"  - Active: %d\n" ...
-							"  - Tier: %d\n" ...
-							"  - Sheen: %d\n" ...
-							"  - Killstreaker: %d\n" ...
-							"Spells Bitfield: %d\n" ...
-							"\n\n",
-							slot, g_inventories[client][class][slot].client,
-							g_inventories[client][class][slot].class, g_inventories[client][class][slot].slotId,
-							g_inventories[client][class][slot].isActiveOverride, g_inventories[client][class][slot].weaponDefIndex, g_inventories[client][class][slot].stockWeaponDefIndex,
-							g_inventories[client][class][slot].quality, g_inventories[client][class][slot].level,
-							g_inventories[client][class][slot].isAustralium, g_inventories[client][class][slot].isFestive,
-							g_inventories[client][class][slot].unusualEffectId, g_inventories[client][class][slot].warPaintId,
-							g_inventories[client][class][slot].warPaintWear, g_inventories[client][class][slot].killstreak.isActive,
-							g_inventories[client][class][slot].killstreak.tier, g_inventories[client][class][slot].killstreak.sheen,
-							g_inventories[client][class][slot].killstreak.killstreaker, g_inventories[client][class][slot].halloweenSpell.spells
-	);
+	PrintToConsole(client, "Slot %d:\n" ... "Client ID: %d\n" ... "Class ID: %d\n" ... "Slot ID: %d\n" ... "Active Override: %d\n" ... "Weapon Def Index: %d\n" ... "Stock Def Index: %d\n" ... "Quality: %d\n" ... "Level: %d\n" ... "Australium: %d\n" ... "Festive: %d\n" ... "Unusual Effect: %d\n" ... "War Paint ID: %d\n" ... "War Paint Wear: %d\n" ... "- Killstreak:\n" ... "  - Active: %d\n" ... "  - Tier: %d\n" ... "  - Sheen: %d\n" ... "  - Killstreaker: %d\n" ... "Spells Bitfield: %d\n" ... "\n\n",
+				   slot, g_inventories[client][class][slot].client,
+				   g_inventories[client][class][slot].class, g_inventories[client][class][slot].slotId,
+				   g_inventories[client][class][slot].isActiveOverride, g_inventories[client][class][slot].weaponDefIndex, g_inventories[client][class][slot].stockWeaponDefIndex,
+				   g_inventories[client][class][slot].quality, g_inventories[client][class][slot].level,
+				   g_inventories[client][class][slot].isAustralium, g_inventories[client][class][slot].isFestive,
+				   g_inventories[client][class][slot].unusualEffectId, g_inventories[client][class][slot].warPaintId,
+				   g_inventories[client][class][slot].warPaintWear, g_inventories[client][class][slot].killstreak.isActive,
+				   g_inventories[client][class][slot].killstreak.tier, g_inventories[client][class][slot].killstreak.sheen,
+				   g_inventories[client][class][slot].killstreak.killstreaker, g_inventories[client][class][slot].halloweenSpell.spells);
 }
 
 public Action CMD_TF2ItemPlugin_DebugInventory(int client, int args)
