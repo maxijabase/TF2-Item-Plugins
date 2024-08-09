@@ -1,3 +1,5 @@
+#include "tf2itemplugin_weapon_menus_handlers.sp"
+
 /**
  * Initializes the user inventory data for a player when joining.
  *
@@ -40,10 +42,10 @@ void TF2ItemPlugin_Menus_MainMenu(int client)
 	char className[64];
 	TF2ItemPlugin_GetTFClassName(TF2_GetPlayerClass(client), className, sizeof(className));
 
-	main.SetTitle("Weapons Manager - %s", className);
+	main.SetTitle("Weapons / %s", className);
 
 	// Loop through each weapon slot.
-	for (int i = 0; i <= MAX_WEAPONS; i++)
+	for (int i = 0; i < MAX_WEAPONS; i++)
 	{
 		// Obtain the weapon at said slot.
 		int weapon = GetPlayerWeaponSlot(client, i);
@@ -88,42 +90,6 @@ void TF2ItemPlugin_Menus_MainMenu(int client)
 }
 
 /**
- * Callback handler for the main menu selections.
- */
-public int MainMenuHandler(Menu menu, MenuAction action, int client, int param)
-{
-	switch (action)
-	{
-		case MenuAction_Select:
-		{
-			// Obtain the weapon entity ID and its name.
-			char weaponEntityStr[12], weaponName[64];
-			menu.GetItem(param, weaponEntityStr, sizeof(weaponEntityStr), _, weaponName, sizeof(weaponName));
-
-			// If this is a special option, handle that first.
-			if (StrEqual(weaponEntityStr, "reset"))
-			{
-				// Reset all inventory configurations for the player.
-				TF2ItemPlugin_InitializeInventory(client);
-
-				// Print a message to their chat to inform them of the reset.
-				CPrintToChat(client, "%s Your weapon preferences have been reset to default values.", PLUGIN_CHATTAG);
-
-				return 0;
-			}
-
-			// Convert the string to an integer.
-			int weaponEntity = StringToInt(weaponEntityStr);
-
-			// Build and open the weapon menu.
-			TF2ItemPlugin_Menus_WeaponMenu(client, param, weaponName, weaponEntity);
-		}
-	}
-
-	return 0;
-}
-
-/**
  * Builds and displays a menu where a weapon can be configured.
  *
  * @param client Client index to build the menu for.
@@ -149,7 +115,7 @@ void TF2ItemPlugin_Menus_WeaponMenu(int client, int slot, char[] name, int weapo
 	char className[64];
 	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
 
-	weaponMenu.SetTitle("Modifying %s for %s", name, className);
+	weaponMenu.SetTitle("Weapons / %s / %s", className, name);
 
 	// Hidden properties that transfer data to the menu handler.
 	char weaponStr[12], slotStr[2];
@@ -207,85 +173,210 @@ void TF2ItemPlugin_Menus_WeaponMenu(int client, int slot, char[] name, int weapo
 	weaponMenu.AddItem("unusualEffectId", unusualEffect, ITEMDRAW_DISABLED);
 
 	// Add the Killstreak option.
-	weaponMenu.AddItem("killstreak", "Killstreak Configuration", ITEMDRAW_DISABLED);
+	weaponMenu.AddItem("killstreak", "Killstreak Configuration", inventory.isActiveOverride ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Add the spells option.
 	weaponMenu.AddItem("spells", "Halloween Spell Configuration", ITEMDRAW_DISABLED);
 
 	// Configure the menu's options.
-	weaponMenu.ExitButton = true;
+	weaponMenu.ExitBackButton = true;
 
 	// Display the menu.
 	weaponMenu.Display(client, MENU_TIME_FOREVER);
 }
 
 /**
- * Callback handler for the weapon menu selections.
+ * Generates a menu for the player to adjust their killstreak settings.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ *
+ * @return void
  */
-public int WeaponMenuHandler(Menu menu, MenuAction action, int client, int param)
+void TF2ItemPlugin_Menus_KillstreakMenu(int client, int slot, char[] name, int weapon)
 {
-	switch (action)
+	// Create the new menu handle.
+	Menu killstreakMenu = new Menu(KillstreakMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class			= TF2_GetPlayerClassInt(client);
+
+	// Access the inventory configuration.
+	TFInventory_Weapons_Slot inventory;
+	inventory = g_inventories[client][class][slot];
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	killstreakMenu.SetTitle("Weapons / %s / %s / Killstreaks", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	killstreakMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	killstreakMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	killstreakMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+
+	// Add the toggleable override option.
+	killstreakMenu.AddItem("override", inventory.isActiveOverride && inventory.killstreak.isActive ? "[X] Override Killstreak Kit" : "[ ] Override Killstreak Kit");
+
+	// Add an information item.
+	killstreakMenu.AddItem("", "If you enable the override, your current kit (if any) will be overriden.", ITEMDRAW_DISABLED);
+
+	// Add the Killstreak option.
+	char tierName[64];
+	TF2ItemPlugin_GetKillstreakTierString(inventory.killstreak.tier, tierName, sizeof(tierName));
+	Format(tierName, sizeof(tierName), "Killstreak Tier: %s", tierName);
+
+	killstreakMenu.AddItem("tier", tierName, inventory.isActiveOverride && inventory.killstreak.isActive ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// Add the sheen option, but only enable it if the killstreak tier is at least Specialized and the override is active.
+	if (inventory.killstreak.tier >= TF2Killstreak_Specialized && inventory.isActiveOverride && inventory.killstreak.isActive)
 	{
-		case MenuAction_Select:
-		{
-			// Obtain the selected option and hidden information.
-			char option[64], weaponName[64], weaponStr[12], slotStr[2];
-			menu.GetItem(param, option, sizeof(option));
-			menu.GetItem(0, weaponName, sizeof(weaponName));
-			menu.GetItem(1, weaponStr, sizeof(weaponStr));
-			menu.GetItem(2, slotStr, sizeof(slotStr));
+		char sheenName[64];
+		TF2ItemPlugin_GetKillstreakSheenString(inventory.killstreak.sheen, sheenName, sizeof(sheenName));
+		Format(sheenName, sizeof(sheenName), "Killstreak Sheen: %s", sheenName);
 
-			// Convert the weapon string to an integer.
-			int weapon = StringToInt(weaponStr), slot = StringToInt(slotStr);
-
-			// If client had changed classes or the weapon entity is no longer valid, return and do nothing.
-			if (!IsValidEdict(weapon) || !IsValidEdict(client)) return 0;
-
-			// If the weapon edict is not a weapon, return and do nothing.
-			char edictClassName[64];
-			GetEdictClassname(weapon, edictClassName, sizeof(edictClassName));
-
-			if (StrContains(edictClassName, "tf_weapon_", false) == -1 && !StrEqual(edictClassName, "saxxy")) return 0;
-
-			// Handle the selected option.
-			if (StrEqual(option, "override"))
-			{
-				// Activate the override for the slot and class.
-				int class = TF2_GetPlayerClassInt(client), itemDefinitionIndex = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex"),
-					quality = GetEntProp(weapon, Prop_Send, "m_iEntityQuality"), level = GetEntProp(weapon, Prop_Send, "m_iEntityLevel");
-
-				// Convert the weapon definition index to a variant if it is a stock weapon.
-				int strangeVariantIndex = TF2ItemPlugin_GetStrangeVariant(itemDefinitionIndex);
-
-				// If a stock weapon was converted, set it on the loadout information.
-				if (strangeVariantIndex != itemDefinitionIndex && strangeVariantIndex != -1) g_inventories[client][class][slot].stockWeaponDefIndex = itemDefinitionIndex;
-
-				// Toggle the slot override status.
-				TF2ItemPlugin_ToggleSlotOverride(client, class, slot, strangeVariantIndex == -1 ? itemDefinitionIndex : strangeVariantIndex, quality, level);
-			}
-
-			if (StrEqual(option, "australium"))
-				// Toggle the Australium status.
-				TF2ItemPlugin_ToggleAustralium(client, slot);
-
-			if (StrEqual(option, "festive"))
-				// Toggle the Festive status.
-				TF2ItemPlugin_ToggleFestive(client, slot);
-
-			// Rebuild the weapons menu after some miliseconds to allow for the changes to take effect (probably a strange variant being given).
-			DataPack data = new DataPack();
-			data.WriteCell(client);
-			data.WriteCell(slot);
-			data.WriteString(weaponName);
-
-			CreateTimer(0.25, TF2ItemPlugin_HandleWeaponMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
-		}
+		killstreakMenu.AddItem("sheen", sheenName, ITEMDRAW_DEFAULT);
 	}
+	else killstreakMenu.AddItem("", "Tier must be Specialized to set a Sheen.", ITEMDRAW_DISABLED);
 
-	return 0;
+	// Add the killstreaker option, but only enable it if the killstreak tier is at least Professional and the override is active.
+	if (inventory.killstreak.tier >= TF2Killstreak_Professional && inventory.isActiveOverride && inventory.killstreak.isActive)
+	{
+		char killstreakerName[64];
+		TF2ItemPlugin_GetKillstreakerName(inventory.killstreak.killstreaker, killstreakerName, sizeof(killstreakerName));
+		Format(killstreakerName, sizeof(killstreakerName), "Killstreaker: %s", killstreakerName);
+
+		killstreakMenu.AddItem("killstreaker", killstreakerName, ITEMDRAW_DEFAULT);
+	}
+	else killstreakMenu.AddItem("", "Tier must be Professional to set a Killstreaker.", ITEMDRAW_DISABLED);
+
+	// Configure the menu's options.
+	killstreakMenu.ExitBackButton = true;
+
+	// Display the menu.
+	killstreakMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public Action TF2ItemPlugin_HandleWeaponMenuRebuild(Handle timer, DataPack data)
+/**
+ * Generates a static menu for the player to select a specific Specialized Killstreak sheen.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_KillstreakSheenMenu(int client, int slot, char[] name, int weapon)
+{
+	// Create the new menu handle.
+	Menu sheenMenu = new Menu(KillstreakOptionsMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class	   = TF2_GetPlayerClassInt(client);
+
+	// Access the inventory configuration.
+	TFInventory_Weapons_Slot inventory;
+	inventory = g_inventories[client][class][slot];
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	sheenMenu.SetTitle("Weapons / %s / %s / Killstreaks / Sheen", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	sheenMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	sheenMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	sheenMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+	sheenMenu.AddItem("sheen", "option", ITEMDRAW_IGNORE);
+
+	// Add the sheen options.
+	for (int i = 1; i <= TF2Killstreak_Sheen_HotRod; i++)
+	{
+		char sheenName[64], sheenIdStr[2];
+		TF2ItemPlugin_GetKillstreakSheenString(i, sheenName, sizeof(sheenName));
+		Format(sheenName, sizeof(sheenName), i == inventory.killstreak.sheen ? "[X] %s" : "[ ] %s", sheenName);
+		Format(sheenIdStr, sizeof(sheenIdStr), "%d", i);
+
+		sheenMenu.AddItem(sheenIdStr, sheenName);
+	}
+
+	// Configure the menu's options.
+	sheenMenu.ExitBackButton = true;
+
+	// Display the menu.
+	sheenMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
+ * Generates a static menu for the player to select a specific Professional Killstreak effect.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_KillstreakerMenu(int client, int slot, char[] name, int weapon)
+{
+	// Create the new menu handle.
+	Menu killstreakerMenu = new Menu(KillstreakOptionsMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class			  = TF2_GetPlayerClassInt(client);
+
+	// Access the inventory configuration.
+	TFInventory_Weapons_Slot inventory;
+	inventory = g_inventories[client][class][slot];
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	killstreakerMenu.SetTitle("Weapons / %s / %s / Killstreaks / Killstreaker", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	killstreakerMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	killstreakerMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	killstreakerMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+	killstreakerMenu.AddItem("killstreaker", "option", ITEMDRAW_IGNORE);
+
+	// Add the killstreaker options.
+	for (int i = TF2Killstreaker_FireHorns; i <= TF2Killstreaker_HypnoBeam; i++)
+	{
+		char killstreakerName[64], killstreakerIdStr[6];
+		TF2ItemPlugin_GetKillstreakerName(i, killstreakerName, sizeof(killstreakerName));
+		Format(killstreakerName, sizeof(killstreakerName), i == inventory.killstreak.killstreaker ? "[X] %s" : "[ ] %s", killstreakerName);
+		Format(killstreakerIdStr, sizeof(killstreakerIdStr), "%d", i);
+
+		killstreakerMenu.AddItem(killstreakerIdStr, killstreakerName);
+	}
+
+	// Configure the menu's options.
+	killstreakerMenu.ExitBackButton = true;
+
+	// Display the menu.
+	killstreakerMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+public Action TF2ItemPlugin_Menus_HandleMenuRebuild(Handle timer, DataPack data)
 {
 	// Reset the DataPack to its initial index.
 	data.Reset();
@@ -293,8 +384,9 @@ public Action TF2ItemPlugin_HandleWeaponMenuRebuild(Handle timer, DataPack data)
 	// Obtain the client and slot from the data pack.
 	int	 client = data.ReadCell(), slot = data.ReadCell();
 
-	char weaponName[64];
+	char weaponName[64], rebuildAction[64];
 	data.ReadString(weaponName, sizeof(weaponName));
+	data.ReadString(rebuildAction, sizeof(rebuildAction));
 
 	// If the client is dead, return and do nothing.
 	if (!IsPlayerAlive(client)) return Plugin_Stop;
@@ -305,8 +397,9 @@ public Action TF2ItemPlugin_HandleWeaponMenuRebuild(Handle timer, DataPack data)
 	// If the entity is not valid, return and do nothing.
 	if (!IsValidEdict(weapon)) return Plugin_Stop;
 
-	// Rebuild the weapon menu.
-	TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
+	// Rebuild the desired menu.
+	if (StrEqual(rebuildAction, "rebuild_weapons")) TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
+	if (StrEqual(rebuildAction, "rebuild_killstreak")) TF2ItemPlugin_Menus_KillstreakMenu(client, slot, weaponName, weapon);
 
 	// Free up the data pack.
 	delete data;

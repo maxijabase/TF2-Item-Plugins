@@ -1,4 +1,4 @@
-#define MAX_WEAPONS 5
+#define MAX_WEAPONS 3
 #define MAX_CLASSES 9
 
 /** Local memory copy where client inventories are stored for server use. */
@@ -26,7 +26,7 @@ stock ConVar			 g_cvar_weapons_onlySpawn;
  * @param buffer The buffer to store the class name.
  * @param size The size of the buffer.
  *
- * @return The class name of the class ID.
+ * @return void
  */
 stock void				 TF2ItemPlugin_GetTFClassName(TFClassType class, char[] buffer, int size)
 {
@@ -116,7 +116,7 @@ stock int TF2ItemPlugin_GetStrangeVariant(int itemDefinitionIndex)
  * @param buffer The buffer to store the slot name.
  * @param size The size of the buffer.
  *
- * @return The name of the slot.
+ * @return void
  */
 stock void TF2ItemPlugin_GetWeaponSlotName(int slot, char[] buffer, int size)
 {
@@ -132,6 +132,112 @@ stock void TF2ItemPlugin_GetWeaponSlotName(int slot, char[] buffer, int size)
 	}
 }
 
+enum
+{
+	TF2Killstreak_None		   = 0,
+	TF2Killstreak_Basic		   = 1,
+	TF2Killstreak_Specialized  = 2,
+	TF2Killstreak_Professional = 3,
+}
+
+/**
+ * Function that maps a Killstreak tier value to a string representation.
+ *
+ * @param tier The Killstreak tier value.
+ * @param buffer The buffer to store the string representation.
+ * @param size The size of the buffer.
+ *
+ * @return void
+ */
+stock void
+	TF2ItemPlugin_GetKillstreakTierString(int tier, char[] buffer, int size)
+{
+	switch (tier)
+	{
+		case -1, 0: strcopy(buffer, size, "None");
+		case 1: strcopy(buffer, size, "Basic");
+		case 2: strcopy(buffer, size, "Specialized");
+		case 3: strcopy(buffer, size, "Professional");
+		default: strcopy(buffer, size, "Unknown");
+	}
+}
+
+enum
+{
+	TF2Killstreak_Sheen_None			 = 0,
+	TF2Killstreak_Sheen_TeamShine		 = 1,
+	TF2Killstreak_Sheen_DeadlyDaffodil	 = 2,
+	TF2Killstreak_Sheen_Manndarin		 = 3,
+	TF2Killstreak_Sheen_MeanGreen		 = 4,
+	TF2Killstreak_Sheen_AgonizingEmerald = 5,
+	TF2Killstreak_Sheen_VillainousViolet = 6,
+	TF2Killstreak_Sheen_HotRod			 = 7,
+}
+
+/**
+ * Function that maps a Killstreak sheen value to a string representation.
+ *
+ * @param sheen The Killstreak sheen value.
+ * @param buffer The buffer to store the string representation.
+ * @param size The size of the buffer.
+ *
+ * @return void
+ */
+stock void
+	TF2ItemPlugin_GetKillstreakSheenString(int sheen, char[] buffer, int size)
+{
+	switch (sheen)
+	{
+		case -1, 0: strcopy(buffer, size, "None");
+		case 1: strcopy(buffer, size, "Team Shine");
+		case 2: strcopy(buffer, size, "Deadly Daffodil");
+		case 3: strcopy(buffer, size, "Manndarin");
+		case 4: strcopy(buffer, size, "Mean Green");
+		case 5: strcopy(buffer, size, "Agonizing Emerald");
+		case 6: strcopy(buffer, size, "Villainous Violet");
+		case 7: strcopy(buffer, size, "Hot Rod");
+		default: strcopy(buffer, size, "Unknown");
+	}
+}
+
+enum
+{
+	TF2Killstreaker_None		= 0,
+	TF2Killstreaker_FireHorns	= 2002,
+	TF2Killstreaker_Cerebral	= 2003,
+	TF2Killstreaker_Tornado		= 2004,
+	TF2Killstreaker_Flames		= 2005,
+	TF2Killstreaker_Singularity = 2006,
+	TF2Killstreaker_Incinerator = 2007,
+	TF2Killstreaker_HypnoBeam	= 2008,
+}
+
+/**
+ * Function that maps a Killstreaker effect value to a string representation.
+ *
+ * @param effect The Killstreaker effect value.
+ * @param buffer The buffer to store the string representation.
+ * @param size The size of the buffer.
+ *
+ * @return void
+ */
+stock void
+	TF2ItemPlugin_GetKillstreakerName(int effect, char[] buffer, int size)
+{
+	switch (effect)
+	{
+		case -1, 0: strcopy(buffer, size, "None");
+		case 2002: strcopy(buffer, size, "Fire Horns");
+		case 2003: strcopy(buffer, size, "Cerebral Discharge");
+		case 2004: strcopy(buffer, size, "Tornado");
+		case 2005: strcopy(buffer, size, "Flames");
+		case 2006: strcopy(buffer, size, "Singularity");
+		case 2007: strcopy(buffer, size, "Incinerator");
+		case 2008: strcopy(buffer, size, "Hypno-Beam");
+		default: strcopy(buffer, size, "Unknown");
+	}
+}
+
 /**
  * Function that maps a War Paint wear value to a string representation.
  *
@@ -139,9 +245,10 @@ stock void TF2ItemPlugin_GetWeaponSlotName(int slot, char[] buffer, int size)
  * @param buffer The buffer to store the string representation.
  * @param size The size of the buffer.
  *
- * @return The string representation of the wear value.
+ * @return void
  */
-stock void TF2ItemPlugin_GetWarPaintWearString(float wear, char[] buffer, int size)
+stock void
+	TF2ItemPlugin_GetWarPaintWearString(float wear, char[] buffer, int size)
 {
 	switch (wear)
 	{
@@ -259,7 +366,15 @@ void TF2ItemPlugin_ApplyWeaponChanges(int client, int slot = 0)
 	// Restore everything
 	SetEntityHealth(client, hp);
 	if (uber > -1.0)
-		SetEntPropFloat(GetPlayerWeaponSlot(client, 1), Prop_Send, "m_flChargeLevel", uber);
+	{
+		// Create a DataPack to later restore Ubercharge after a short delay.
+		DataPack data = new DataPack();
+		data.WriteCell(client);
+		data.WriteFloat(uber);
+
+		// Create a timer to restore the Übercharge after a short delay.
+		CreateTimer(0.1, TF2ItemPlugin_RestoreUber, data);
+	}
 
 	for (int i = 0; i < sizeof(clip); i++)
 	{
@@ -275,6 +390,29 @@ void TF2ItemPlugin_ApplyWeaponChanges(int client, int slot = 0)
 
 	// Set active weapon as the changed one
 	SetEntPropEnt(client, Prop_Send, "m_hActiveWeapon", GetPlayerWeaponSlot(client, slot));
+}
+
+public Action TF2ItemPlugin_RestoreUber(Handle timer, DataPack data)
+{
+	// Reset the DataPack's index to the start.
+	data.Reset();
+
+	// Retrieve the client and Übercharge value.
+	int	  client  = data.ReadCell();
+	float uber	  = data.ReadFloat();
+
+	// Obtain the player's Medigun.
+	int	  medigun = GetPlayerWeaponSlot(client, 1);
+
+	// If the Medigun is still valid, restore the Übercharge.
+	if (medigun != INVALID_ENT_REFERENCE)
+		SetEntPropFloat(medigun, Prop_Send, "m_flChargeLevel", uber);
+
+	// Destroy the DataPack.
+	delete data;
+
+	// Return Plugin_Stop to stop the timer.
+	return Plugin_Stop;
 }
 
 /**
@@ -322,11 +460,14 @@ stock void TF2ItemPlugin_ToggleAustralium(int client, int slot)
 	if (slot < 0 || slot >= MAX_WEAPONS)
 		return;
 
+	// Get the player's class.
+	int class										= TF2_GetPlayerClassInt(client);
+
 	// Toggle the australium status for the slot.
-	g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isAustralium = !g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isAustralium;
+	g_inventories[client][class][slot].isAustralium = !g_inventories[client][class][slot].isAustralium;
 
 	// Refresh the player's inventory.
-	if (g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isActiveOverride)
+	if (g_inventories[client][class][slot].isActiveOverride)
 		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
 }
 
@@ -344,11 +485,132 @@ stock void TF2ItemPlugin_ToggleFestive(int client, int slot)
 	if (slot < 0 || slot >= MAX_WEAPONS)
 		return;
 
+	// Get the player's class.
+	int class									 = TF2_GetPlayerClassInt(client);
+
 	// Toggle the festive status for the slot.
-	g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isFestive = !g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isFestive;
+	g_inventories[client][class][slot].isFestive = !g_inventories[client][class][slot].isFestive;
 
 	// Refresh the player's inventory.
-	if (g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isActiveOverride)
+	if (g_inventories[client][class][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Toggles a client's killstreak override status.
+ *
+ * @param client Client index to change the killstreak override status for.
+ * @param slot Slot ID to change the killstreak override status for.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_ToggleKillstreakOverride(int client, int slot)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class											   = TF2_GetPlayerClassInt(client);
+
+	// Toggle the killstreak override status for the slot.
+	g_inventories[client][class][slot].killstreak.isActive = !g_inventories[client][class][slot].killstreak.isActive;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Changes the killstreak tier for the override.
+ *
+ * Each time this is called, the killstreak tier is increased by one until it reaches `TF2Killstreak_Professional`.
+ * If the tier is already at `TF2Killstreak_Professional`, it is reset to `TF2Killstreak_None`.
+ *
+ * @param client Client index to change the killstreak tier for.
+ * @param slot Slot ID to change the killstreak tier for.
+ * @param tier Optional. The tier to set the killstreak to.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_ChangeKillstreakTier(int client, int slot, int tier = -1)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class = TF2_GetPlayerClassInt(client);
+
+	// If the tier provided is not -1 but is between bounds, set the killstreak tier to it.
+	if (tier != -1 && tier >= TF2Killstreak_None && tier <= TF2Killstreak_Professional)
+	{
+		g_inventories[client][class][slot].killstreak.tier = tier;
+		return;
+	}
+
+	// If the tier is already at Professional, reset it to None.
+	if (g_inventories[client][class][slot].killstreak.tier == TF2Killstreak_Professional)
+		g_inventories[client][class][slot].killstreak.tier = TF2Killstreak_None;
+
+	else
+		// Otherwise, increase the tier by one.
+		g_inventories[client][class][slot].killstreak.tier++;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride && g_inventories[client][class][slot].killstreak.isActive)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Sets the killstreak sheen for the override.
+ *
+ * @param client Client index to set the killstreak sheen for.
+ * @param slot Slot ID to set the killstreak sheen for.
+ * @param sheen The sheen to set the killstreak to.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_SetKillstreakSheen(int client, int slot, int sheen)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class											= TF2_GetPlayerClassInt(client);
+
+	// Set the killstreak sheen for the slot.
+	g_inventories[client][class][slot].killstreak.sheen = sheen;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride && g_inventories[client][class][slot].killstreak.isActive)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Sets the killstreak effect for the override.
+ *
+ * @param client Client index to set the killstreak effect for.
+ * @param slot Slot ID to set the killstreak effect for.
+ * @param effect The effect to set the killstreak to.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_SetKillstreakerEffect(int client, int slot, int effect)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class												   = TF2_GetPlayerClassInt(client);
+
+	// Set the killstreak effect for the slot.
+	g_inventories[client][class][slot].killstreak.killstreaker = effect;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride && g_inventories[client][class][slot].killstreak.isActive)
 		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
 }
 
@@ -464,6 +726,47 @@ stock bool
 }
 
 /**
+ * Applies a full killstreak configuration to a weapon.
+ *
+ * @param client Client index to apply the killstreak configuration for.
+ * @param class The class to apply the killstreak configuration for.
+ * @param slot The slot to apply the killstreak configuration for.
+ * @param hItem The item handle to apply the killstreak configuration to.
+ * @param iItemDefinitionIndex The item definition index of the item.
+ *
+ * @return True if the item's properties were modified, false otherwise.
+ */
+stock bool
+	TF2ItemPlugin_TF2Items_ApplyKillstreak(int client, int class, int slot, Handle& hItem, int iItemDefinitionIndex)
+{
+	// Check if the client has enabled a killstreak override first.
+	if (!g_inventories[client][class][slot].killstreak.isActive)
+		return false;
+
+	// Set the item's killstreak tier based on the client's preferences.
+	int tier   = g_inventories[client][class][slot].killstreak.tier,
+		sheen  = g_inventories[client][class][slot].killstreak.sheen,
+		effect = g_inventories[client][class][slot].killstreak.killstreaker;
+
+	// If the tier is set to None, return false.
+	if (tier == TF2Killstreak_None)
+		return false;
+
+	// Set the item's killstreak tier.
+	TF2Items_SetAttribute(hItem, 4, 2025, float(tier));
+
+	// Only set the sheen if the tier is Specialized or higher.
+	if (tier >= TF2Killstreak_Specialized)
+		TF2Items_SetAttribute(hItem, 5, 2014, float(sheen));
+
+	// Only set the killstreaker if the tier is Professional.
+	if (tier == TF2Killstreak_Professional)
+		TF2Items_SetAttribute(hItem, 6, 2013, float(effect));
+
+	return true;
+}
+
+/**
  * Applies a client's preferences for a weapon to an `hItem` `Handle`.
  *
  * Keep in mind this should be called with a valid/existing `Handle` to a weapon (from 'TF2Items_OnGiveNamedItem')
@@ -512,6 +815,7 @@ stock Action TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class
 
 	TF2ItemPlugin_TF2Items_ApplyAustralium(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyFestive(client, class, slot, hItem, iItemDefinitionIndex);
+	TF2ItemPlugin_TF2Items_ApplyKillstreak(client, class, slot, hItem, iItemDefinitionIndex);
 
 	// If the strange variant is being created, give the named item and properly equip it on the player.
 	if (isCreatingStrangeVariant)
