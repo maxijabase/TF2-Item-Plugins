@@ -99,6 +99,24 @@ public int WeaponMenuHandler(Menu menu, MenuAction action, int client, int param
 				return 0;
 			}
 
+			if (StrEqual(option, "spells"))
+			{
+				// Open the sub-menu for the Halloween spell selection.
+				TF2ItemPlugin_Menus_SpellsMenu(client, slot, weaponName, weapon);
+
+				// Prevent a rebuild of the next menu.
+				return 0;
+			}
+
+			if (StrEqual(option, "unusual"))
+			{
+				// Open the sub-menu for the unusual effect selection.
+				TF2ItemPlugin_Menus_UnusualMenu(client, slot, weaponName, weapon);
+
+				// Prevent a rebuild of the next menu.
+				return 0;
+			}
+
 			// Rebuild the weapons menu after some miliseconds to allow for the changes to take effect (probably a strange variant being given).
 			DataPack data = new DataPack();
 			data.WriteCell(client);
@@ -257,6 +275,138 @@ public int KillstreakOptionsMenuHandler(Menu menu, MenuAction action, int client
 			if (param == MenuCancel_ExitBack)
 				// Rebuild the killstreak menu.
 				TF2ItemPlugin_Menus_KillstreakMenu(client, slot, weaponName, weapon);
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * Callback to handle selections in the spells menu.
+ */
+public int SpellsMenuHandler(Menu menu, MenuAction action, int client, int param)
+{
+	// Obtain the hidden parameters' information.
+	char weaponStr[12], slotStr[2], weaponName[64];
+	menu.GetItem(0, weaponName, sizeof(weaponName));
+	menu.GetItem(1, weaponStr, sizeof(weaponStr));
+	menu.GetItem(2, slotStr, sizeof(slotStr));
+
+	// Convert the weapon string to an integer.
+	int weapon = StringToInt(weaponStr), slot = StringToInt(slotStr);
+
+	// If client had changed classes or the weapon entity is no longer valid, return and do nothing.
+	if (!IsValidEdict(weapon) || !IsValidEdict(client)) return 0;
+
+	// If the weapon edict is not a weapon, return and do nothing.
+	char edictClassName[64];
+	GetEdictClassname(weapon, edictClassName, sizeof(edictClassName));
+
+	if (StrContains(edictClassName, "tf_weapon_", false) == -1 && !StrEqual(edictClassName, "saxxy")) return 0;
+
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			// Obtain the selected option.
+			char option[64];
+			menu.GetItem(param, option, sizeof(option));
+
+			// Transform the option to an integer.
+			int spell = StringToInt(option);
+
+			// Handle the selected option.
+			if (StrEqual(option, "override"))
+				// Activate the override for the slot and class.
+				TF2ItemPlugin_ToggleSpellOverride(client, slot);
+
+			else {
+				// Check if it's already set.
+				bool isSet = view_as<bool>(g_inventories[client][TF2_GetPlayerClassInt(client)][slot].halloweenSpell.spells & (1 << spell));
+
+				// Set the Halloween spell accordingly.
+				TF2ItemPlugin_SetHalloweenSpell(client, slot, spell, isSet);
+			}
+
+			// Rebuild the spells menu after some miliseconds to allow for the changes to take effect.
+			DataPack data = new DataPack();
+			data.WriteCell(client);
+			data.WriteCell(slot);
+			data.WriteString(weaponName);
+			data.WriteString("rebuild_spells");
+
+			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+		}
+		case MenuAction_Cancel:
+		{
+			// Check if the user tried going back.
+			if (param == MenuCancel_ExitBack)
+				// Rebuild the weapon menu.
+				TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * Callback to handle selections within the unusual effects menu.
+ */
+public int UnusualMenuHandler(Menu menu, MenuAction action, int client, int param)
+{
+	// Obtain the hidden parameters' information.
+	char weaponStr[12], slotStr[2], weaponName[64];
+	menu.GetItem(0, weaponName, sizeof(weaponName));
+	menu.GetItem(1, weaponStr, sizeof(weaponStr));
+	menu.GetItem(2, slotStr, sizeof(slotStr));
+
+	// Convert the weapon string to an integer.
+	int weapon = StringToInt(weaponStr), slot = StringToInt(slotStr);
+
+	// If client had changed classes or the weapon entity is no longer valid, return and do nothing.
+	if (!IsValidEdict(weapon) || !IsValidEdict(client)) return 0;
+
+	// If the weapon edict is not a weapon, return and do nothing.
+	char edictClassName[64];
+	GetEdictClassname(weapon, edictClassName, sizeof(edictClassName));
+
+	if (StrContains(edictClassName, "tf_weapon_", false) == -1 && !StrEqual(edictClassName, "saxxy")) return 0;
+
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			// Obtain the selected option.
+			char option[64];
+			menu.GetItem(param, option, sizeof(option));
+
+			// Transform the option to an integer.
+			int effect = StringToInt(option);
+
+			// Handle the selected option.
+			if (StrEqual(option, "clear"))
+				// Reset the unusual effect to its default value.
+				TF2ItemPlugin_SetUnusualEffect(client, slot, -1);
+
+			else
+				// Set the unusual effect accordingly.
+				TF2ItemPlugin_SetUnusualEffect(client, slot, effect);
+
+			// Rebuild the unusual effects menu after some miliseconds to allow for the changes to take effect.
+			DataPack data = new DataPack();
+			data.WriteCell(client);
+			data.WriteCell(slot);
+			data.WriteString(weaponName);
+			data.WriteString("rebuild_unusual");
+
+			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+		}
+		case MenuAction_Cancel:
+		{
+			// Check if the user tried going back.
+			if (param == MenuCancel_ExitBack)
+				// Rebuild the weapon menu.
+				TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
 		}
 	}
 

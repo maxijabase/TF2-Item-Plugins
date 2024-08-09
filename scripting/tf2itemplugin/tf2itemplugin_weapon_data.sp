@@ -1,15 +1,12 @@
-#define WeaponSpell_Exorcism           (1 << 0)
-#define WeaponSpell_SquashRockets      (1 << 1)
-#define WeaponSpell_SpectralFlames     (1 << 2)
-#define WeaponSpell_SentryQuadPumpkins (1 << 3)
-#define WeaponSpell_GourdGrenades      (1 << 4)
-
-#define WeaponSpell_Explosions         (WeaponSpell_SquashRockets | WeaponSpell_SentryQuadPumpkins | WeaponSpell_GourdGrenades)
-
 /**
  * Represents a weapon's Halloween spell stack configuration.
  */
 enum struct TFInventory_Weapons_Slot_Spells {
+    /**
+     * Boolean value that controls if Halloween spells are active for this weapon.
+     */
+    bool isActive;
+
     /**
      * Bitfield that holds the enabled Halloween spells for this weapon.
      */

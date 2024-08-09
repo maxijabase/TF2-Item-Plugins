@@ -1,5 +1,13 @@
-#define MAX_WEAPONS 3
-#define MAX_CLASSES 9
+#define MAX_WEAPONS					   3
+#define MAX_CLASSES					   9
+
+#define WeaponSpell_Exorcism		   (1 << 0)
+#define WeaponSpell_SpectralFlames	   (1 << 1)
+#define WeaponSpell_SquashRockets	   (1 << 2)
+#define WeaponSpell_SentryQuadPumpkins (1 << 3)
+#define WeaponSpell_GourdGrenades	   (1 << 4)
+
+#define WeaponSpell_Explosions		   (WeaponSpell_SquashRockets | WeaponSpell_SentryQuadPumpkins | WeaponSpell_GourdGrenades)
 
 /** Local memory copy where client inventories are stored for server use. */
 TFInventory_Weapons_Slot g_inventories[MAXPLAYERS + 1][MAX_CLASSES][MAX_WEAPONS];
@@ -235,6 +243,58 @@ stock void
 		case 2007: strcopy(buffer, size, "Incinerator");
 		case 2008: strcopy(buffer, size, "Hypno-Beam");
 		default: strcopy(buffer, size, "Unknown");
+	}
+}
+
+/**
+ * Function that maps a spell ID to a string representation.
+ *
+ * @param spell The spell ID.
+ * @param buffer The buffer to store the string representation.
+ * @param size The size of the buffer.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_GetHalloweenSpellName(int spell, char[] buffer, int size)
+{
+	switch (spell)
+	{
+		case 0: strcopy(buffer, size, "Exorcism");
+		case 1: strcopy(buffer, size, "Spectral Flames");
+		case 2: strcopy(buffer, size, "Squash Rockets");
+		case 3: strcopy(buffer, size, "Sentry Quad-Pumpkins");
+		case 4: strcopy(buffer, size, "Gourd Grenades");
+	}
+}
+
+enum
+{
+	TF2WeaponUnusual_None	   = 0,
+	TF2WeaponUnusual_Hot	   = 701,
+	TF2WeaponUnusual_Isotope   = 702,
+	TF2WeaponUnusual_Cool	   = 703,
+	TF2WeaponUnusual_EnergyOrb = 704,
+}
+
+/**
+ * Function that maps a weapon Unusual Effect ID to a string representation.
+ *
+ * @param effect The Unusual Effect ID.
+ * @param buffer The buffer to store the string representation.
+ * @param size The size of the buffer.
+ *
+ * @return void
+ */
+stock void
+	TF2ItemPlugin_GetUnusualEffectName(int effect, char[] buffer, int size)
+{
+	switch (effect)
+	{
+		case -1, 0: strcopy(buffer, size, "None");
+		case 701: strcopy(buffer, size, "Hot");
+		case 702: strcopy(buffer, size, "Isotope");
+		case 703: strcopy(buffer, size, "Cool");
+		case 704: strcopy(buffer, size, "Energy Orb");
 	}
 }
 
@@ -614,6 +674,87 @@ stock void TF2ItemPlugin_SetKillstreakerEffect(int client, int slot, int effect)
 		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
 }
 
+/**
+ * Toggles the active status for spell overrides.
+ *
+ * @param client Client index to toggle the spell override status for.
+ * @param slot Slot ID to toggle the spell override status for.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_ToggleSpellOverride(int client, int slot)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class												   = TF2_GetPlayerClassInt(client);
+
+	// Toggle the spell override status for the slot.
+	g_inventories[client][class][slot].halloweenSpell.isActive = !g_inventories[client][class][slot].halloweenSpell.isActive;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Sets a bit flag for a specific spell override.
+ *
+ * @param client Client index to set the spell override for.
+ * @param slot Slot ID to set the spell override for.
+ * @param spell The spell ID to set the override for.
+ * @param unset Optional. If set, the bit flag will be unset instead of set.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_SetHalloweenSpell(int client, int slot, int spell, bool unset = false)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class = TF2_GetPlayerClassInt(client);
+
+	// Set/unset the spell override for the slot.
+	if (unset) g_inventories[client][class][slot].halloweenSpell.spells &= ~(1 << spell);
+	else g_inventories[client][class][slot].halloweenSpell.spells |= 1 << spell;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride && g_inventories[client][class][slot].halloweenSpell.isActive)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Sets the Unusual Effect ID for the override.
+ *
+ * If set to -1, the override will be ignored.
+ *
+ * @param client Client index to set the unusual effect override status for.
+ * @param slot Slot ID to set the unusual effect override status for.
+ * @param unusualEffect The Unusual Effect ID to set the override to.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_SetUnusualEffect(int client, int slot, int unusualEffect)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class										   = TF2_GetPlayerClassInt(client);
+
+	// Toggle the unusual effect override status for the slot.
+	g_inventories[client][class][slot].unusualEffectId = unusualEffect;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
 enum
 {
 	TF2Quality_Normal	  = 0,
@@ -767,6 +908,78 @@ stock bool
 }
 
 /**
+ * Applies a full spell configuration to a weapon.
+ *
+ * @param client Client index to apply the spell configuration for.
+ * @param class The class to apply the spell configuration for.
+ * @param slot The slot to apply the spell configuration for.
+ * @param hItem The item handle to apply the spell configuration to.
+ * @param iItemDefinitionIndex The item definition index of the item.
+ *
+ * @return True if the item's properties were modified, false otherwise.
+ */
+stock bool
+	TF2ItemPlugin_TF2Items_ApplySpell(int client, int class, int slot, Handle& hItem, int iItemDefinitionIndex)
+{
+	// Check if the client has enabled a spell override first.
+	if (!g_inventories[client][class][slot].halloweenSpell.isActive)
+		return false;
+
+	// Set the item's spell configuration based on the client's preferences.
+	int spells = g_inventories[client][class][slot].halloweenSpell.spells;
+
+	// If no spells are set, return false.
+	if (spells == 0)
+		return false;
+
+	// Analyze the spell configuration.
+	// Exorcism can be applied to any weapon, no need to check if set.
+	if (spells & WeaponSpell_Exorcism)
+		TF2Items_SetAttribute(hItem, 9, 1009, 1.0);
+
+	// Spectral Flames will only be set if the override is on Pyro.
+	if (spells & WeaponSpell_SpectralFlames && view_as<TFClassType>(class) == TFClass_Pyro)
+		TF2Items_SetAttribute(hItem, 10, 1008, 1.0);
+
+	// Sentry-Quad, Squash Rockets and Gourd Grenades share the same attribute. Set if they are set and class is Engineer, Demo or Soldier.
+	if ((spells & WeaponSpell_Explosions) && (view_as<TFClassType>(class) == TFClass_Engineer || view_as<TFClassType>(class) == TFClass_DemoMan || view_as<TFClassType>(class) == TFClass_Soldier))
+		TF2Items_SetAttribute(hItem, 11, 1010, 1.0);
+
+	return true;
+}
+
+/**
+ * Applies an unusual effect to a weapon.
+ *
+ * @param client Client index to apply the unusual effect for.
+ * @param class The class to apply the unusual effect for.
+ * @param slot The slot to apply the unusual effect for.
+ * @param hItem The item handle to apply the unusual effect to.
+ * @param iItemDefinitionIndex The item definition index of the item.
+ *
+ * @return True if the item's properties were modified, false otherwise.
+ */
+stock bool
+	TF2ItemPlugin_TF2Items_ApplyUnusualEffect(int client, int class, int slot, Handle& hItem, int iItemDefinitionIndex)
+{
+	// Check if the client has enabled an unusual effect override first.
+	if (g_inventories[client][class][slot].unusualEffectId == -1)
+		return false;
+
+	// Set the item's unusual effect based on the client's preferences.
+	int unusualEffect = g_inventories[client][class][slot].unusualEffectId;
+
+	// If the unusual effect is set to None or disabled, return false.
+	if (unusualEffect <= TF2WeaponUnusual_None)
+		return false;
+
+	// Set the item's unusual effect.
+	TF2Items_SetAttribute(hItem, 12, 134, float(unusualEffect));
+
+	return true;
+}
+
+/**
  * Applies a client's preferences for a weapon to an `hItem` `Handle`.
  *
  * Keep in mind this should be called with a valid/existing `Handle` to a weapon (from 'TF2Items_OnGiveNamedItem')
@@ -816,6 +1029,8 @@ stock Action TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class
 	TF2ItemPlugin_TF2Items_ApplyAustralium(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyFestive(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyKillstreak(client, class, slot, hItem, iItemDefinitionIndex);
+	TF2ItemPlugin_TF2Items_ApplySpell(client, class, slot, hItem, iItemDefinitionIndex);
+	TF2ItemPlugin_TF2Items_ApplyUnusualEffect(client, class, slot, hItem, iItemDefinitionIndex);
 
 	// If the strange variant is being created, give the named item and properly equip it on the player.
 	if (isCreatingStrangeVariant)
@@ -828,6 +1043,9 @@ stock Action TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class
 
 		// Give the item to the player.
 		int weaponEntity = TF2Items_GiveNamedItem(client, hItem);
+
+		// Make sure the weapon is visible to everyone.
+		SetEntProp(weaponEntity, Prop_Send, "m_bValidatedAttachedEntity", 1);
 
 		// Equip it on the player.
 		EquipPlayerWeapon(client, weaponEntity);

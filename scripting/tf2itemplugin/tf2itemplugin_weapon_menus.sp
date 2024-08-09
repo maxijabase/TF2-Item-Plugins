@@ -77,10 +77,10 @@ void TF2ItemPlugin_Menus_MainMenu(int client)
 	main.AddItem(".", "Select a weapon of your choice to begin.", ITEMDRAW_DISABLED);
 
 	// Add options to reset all configurations.
-	main.AddItem("load", "Load my preferences");
-	main.AddItem("save", "Save my preferences");
+	main.AddItem("load", "Load my preferences", ITEMDRAW_DISABLED);
+	main.AddItem("save", "Save my preferences", ITEMDRAW_DISABLED);
 	main.AddItem("reset", "Reset all my preferences");
-	main.AddItem("delete", "Delete my saved preferences");
+	main.AddItem("delete", "Delete my saved preferences", ITEMDRAW_DISABLED);
 
 	// Configure the menu's options.
 	main.ExitButton = true;
@@ -168,15 +168,16 @@ void TF2ItemPlugin_Menus_WeaponMenu(int client, int slot, char[] name, int weapo
 
 	// Add the Unusual Effect ID option.
 	char unusualEffect[64];
-	Format(unusualEffect, sizeof(unusualEffect), "Unusual Effect ID: %d", inventory.unusualEffectId);
+	TF2ItemPlugin_GetUnusualEffectName(inventory.unusualEffectId, unusualEffect, sizeof(unusualEffect));
+	Format(unusualEffect, sizeof(unusualEffect), "Unusual Effect: %s", unusualEffect);
 
-	weaponMenu.AddItem("unusualEffectId", unusualEffect, ITEMDRAW_DISABLED);
+	weaponMenu.AddItem("unusual", unusualEffect, inventory.isActiveOverride ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Add the Killstreak option.
 	weaponMenu.AddItem("killstreak", "Killstreak Configuration", inventory.isActiveOverride ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Add the spells option.
-	weaponMenu.AddItem("spells", "Halloween Spell Configuration", ITEMDRAW_DISABLED);
+	weaponMenu.AddItem("spells", "Halloween Spell Configuration", inventory.isActiveOverride ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Configure the menu's options.
 	weaponMenu.ExitBackButton = true;
@@ -376,6 +377,157 @@ void TF2ItemPlugin_Menus_KillstreakerMenu(int client, int slot, char[] name, int
 	killstreakerMenu.Display(client, MENU_TIME_FOREVER);
 }
 
+/**
+ * Generates a static menu to configure set halloween spells on a weapon.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_SpellsMenu(int client, int slot, char[] name, int weapon)
+{
+	// Create the new menu handle.
+	Menu spellsMenu = new Menu(SpellsMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class		= TF2_GetPlayerClassInt(client);
+
+	// Access the inventory configuration.
+	TFInventory_Weapons_Slot inventory;
+	inventory = g_inventories[client][class][slot];
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	spellsMenu.SetTitle("Weapons / %s / %s / Spells", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	spellsMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	spellsMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	spellsMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+
+	// Check for renderable options.
+	bool canRenderSelectable = inventory.isActiveOverride && inventory.halloweenSpell.isActive;
+
+	// Add the override toggle.
+	spellsMenu.AddItem("override", inventory.isActiveOverride && inventory.halloweenSpell.isActive ? "[X] Override spells" : "[ ] Override spells");
+
+	// Add an informative message.
+	spellsMenu.AddItem("", "Remember spells will only work if the server has Halloween mode enabled.", ITEMDRAW_DISABLED);
+
+	// Add Exorcism (global spell)
+	spellsMenu.AddItem("0", inventory.halloweenSpell.spells & WeaponSpell_Exorcism ? "[X] Exorcism" : "[ ] Exorcism", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// For other spells, we need to check the weapon's classname.
+	char weaponClassName[64];
+	GetEdictClassname(weapon, weaponClassName, sizeof(weaponClassName));
+
+	// Allow Spectral Flames on flamethrowers.
+	if (StrEqual(weaponClassName, "tf_weapon_flamethrower") || StrEqual(weaponClassName, "tf_weapon_rocketlauncher_fireball") && view_as<TFClassType>(class) == TFClass_Pyro)
+		spellsMenu.AddItem("1", inventory.halloweenSpell.spells & WeaponSpell_SpectralFlames ? "[X] Spectral Flames" : "[ ] Spectral Flames", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// Allow Sentry Quad Pumpkins on wrenches.
+	if (StrEqual(weaponClassName, "tf_weapon_wrench") || StrEqual(weaponClassName, "tf_weapon_robot_arm") || StrEqual(weaponClassName, "saxxy") && view_as<TFClassType>(class) == TFClass_Engineer)
+		spellsMenu.AddItem("2", inventory.halloweenSpell.spells & WeaponSpell_SentryQuadPumpkins ? "[X] Sentry Quad Pumpkins" : "[ ] Sentry Quad Pumpkins", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// Allow Gourd Grenades on grenade launchers.
+	if (StrEqual(weaponClassName, "tf_weapon_grenadelauncher") || StrEqual(weaponClassName, "tf_weapon_pipebomblauncher") || StrEqual(weaponClassName, "tf_weapon_cannon") && view_as<TFClassType>(class) == TFClass_DemoMan)
+		spellsMenu.AddItem("3", inventory.halloweenSpell.spells & WeaponSpell_GourdGrenades ? "[X] Gourd Grenades" : "[ ] Gourd Grenades", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// Allow Squash Rockets on rocket launchers.
+	if (StrEqual(weaponClassName, "tf_weapon_rocketlauncher") || StrEqual(weaponClassName, "tf_weapon_rocketlauncher_directhit") || StrEqual(weaponClassName, "tf_weapon_particle_cannon") || StrEqual(weaponClassName, "tf_weapon_rocketlauncher_airstrike") && view_as<TFClassType>(class) == TFClass_Soldier)
+		spellsMenu.AddItem("4", inventory.halloweenSpell.spells & WeaponSpell_SquashRockets ? "[X] Squash Rockets" : "[ ] Squash Rockets", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// Configure the menu's options.
+	spellsMenu.ExitBackButton = true;
+
+	// Display the menu.
+	spellsMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
+ * Generates a menu to set unusual effects on a weapon.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_UnusualMenu(int client, int slot, char[] name, int weapon)
+{
+	// Create the new menu handle.
+	Menu unusualMenu = new Menu(UnusualMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class		 = TF2_GetPlayerClassInt(client);
+
+	// Access the inventory configuration.
+	TFInventory_Weapons_Slot inventory;
+	inventory = g_inventories[client][class][slot];
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	unusualMenu.SetTitle("Weapons / %s / %s / Unusual Effects", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	unusualMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	unusualMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	unusualMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+
+	// Add a special option to clear the unusual effect.
+	unusualMenu.AddItem("clear", "Clear my selection", inventory.unusualEffectId != -1 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// Add an information item to check their unusual override status.
+	char unusualEffectName[64];
+	TF2ItemPlugin_GetUnusualEffectName(inventory.unusualEffectId, unusualEffectName, sizeof(unusualEffectName));
+	Format(unusualEffectName, sizeof(unusualEffectName), "Selected Unusual: %s", inventory.unusualEffectId == -1 ? "No Unusual Effect" : unusualEffectName);
+
+	unusualMenu.AddItem("", inventory.isActiveOverride && inventory.unusualEffectId == -1 ? "No Unusual override yet. Select one." : unusualEffectName, ITEMDRAW_DISABLED);
+
+	// Add the Unusual Effect ID options.
+	for (int i = TF2WeaponUnusual_Hot; i <= TF2WeaponUnusual_EnergyOrb; i++)
+	{
+		// Get the unusual effect name.
+		char effectName[64], effectIdStr[5];
+		TF2ItemPlugin_GetUnusualEffectName(i, effectName, sizeof(effectName));
+		Format(effectName, sizeof(effectName), inventory.unusualEffectId == i ? "[X] %s" : "[ ] %s", effectName);
+		Format(effectIdStr, sizeof(effectIdStr), "%d", i);
+
+		// Add the effect to the menu.
+		unusualMenu.AddItem(effectIdStr, effectName, ITEMDRAW_DEFAULT);
+	}
+
+	// Configure the menu's options.
+	unusualMenu.ExitBackButton = true;
+
+	// Display the menu.
+	unusualMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
+ * Rebuilds a menu depending on the origin to make sure changes take effect correctly.
+ *
+ * @param timer Timer handle that triggered this action.
+ * @param data DataPack instance containing the client and slot to rebuild the menu for.
+ *
+ * @return Action
+ */
 public Action TF2ItemPlugin_Menus_HandleMenuRebuild(Handle timer, DataPack data)
 {
 	// Reset the DataPack to its initial index.
@@ -398,8 +550,9 @@ public Action TF2ItemPlugin_Menus_HandleMenuRebuild(Handle timer, DataPack data)
 	if (!IsValidEdict(weapon)) return Plugin_Stop;
 
 	// Rebuild the desired menu.
-	if (StrEqual(rebuildAction, "rebuild_weapons")) TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
+	if (StrEqual(rebuildAction, "rebuild_weapons") || StrEqual(rebuildAction, "rebuild_unusual")) TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
 	if (StrEqual(rebuildAction, "rebuild_killstreak")) TF2ItemPlugin_Menus_KillstreakMenu(client, slot, weaponName, weapon);
+	if (StrEqual(rebuildAction, "rebuild_spells")) TF2ItemPlugin_Menus_SpellsMenu(client, slot, weaponName, weapon);
 
 	// Free up the data pack.
 	delete data;
