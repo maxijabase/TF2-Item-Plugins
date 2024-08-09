@@ -1,0 +1,639 @@
+#define MAX_WEAPONS 5
+#define MAX_CLASSES 9
+
+/** Local memory copy where client inventories are stored for server use. */
+TFInventory_Weapons_Slot g_inventories[MAXPLAYERS + 1][MAX_CLASSES][MAX_WEAPONS];
+
+// Network prop for weapon clip.
+int						 clipOff;
+
+// Network prop for weapon ammo.
+int						 ammoOff;
+
+// Handle that stores the "Regenerate" SDK call to refresh player inventories.
+Handle					 hRegen = INVALID_HANDLE;
+
+// Array that stores wether a player is within a spawn room.
+bool					 g_bInSpawnRoom[MAXPLAYERS + 1];
+
+/** ConVar that controls if weapon changes are only allowed when the player is within a spawn room. */
+stock ConVar			 g_cvar_weapons_onlySpawn;
+
+/**
+ * Obtains the class name of a class ID for visual representation.
+ *
+ * @param class The `TFClassType` class ID to obtain the name for.
+ * @param buffer The buffer to store the class name.
+ * @param size The size of the buffer.
+ *
+ * @return The class name of the class ID.
+ */
+stock void				 TF2ItemPlugin_GetTFClassName(TFClassType class, char[] buffer, int size)
+{
+	switch (class)
+	{
+		case TFClass_Scout: strcopy(buffer, size, "Scout");
+		case TFClass_Soldier: strcopy(buffer, size, "Soldier");
+		case TFClass_Pyro: strcopy(buffer, size, "Pyro");
+		case TFClass_DemoMan: strcopy(buffer, size, "Demoman");
+		case TFClass_Heavy: strcopy(buffer, size, "Heavy");
+		case TFClass_Engineer: strcopy(buffer, size, "Engineer");
+		case TFClass_Medic: strcopy(buffer, size, "Medic");
+		case TFClass_Sniper: strcopy(buffer, size, "Sniper");
+		case TFClass_Spy: strcopy(buffer, size, "Spy");
+		default: strcopy(buffer, size, "Unknown");
+	}
+}
+
+/**
+ * Transforms a stock weapons' definition index into its strange counterpart.
+ *
+ * Strange variants for stock weapons allow modifications such as festivizers, war paint and australiums whereas their stock counterparts do not.
+ *
+ * @param itemDefinitionIndex The stock weapon's item definition index to convert.
+ *
+ * @return The strange variant's item definition index.
+ */
+stock int TF2ItemPlugin_GetStrangeVariant(int itemDefinitionIndex)
+{
+	switch (itemDefinitionIndex)
+	{
+		case 10, 12, 11, 9: return 199;	   // Shotguns (Heavy, Pyro, Soldier, Engineer)
+		case 22, 23:
+			return 209;	   // Pistols (Engineer, Scout)
+		/** Scout */
+		case 13: return 200;	// Scattergun
+		case 0:
+			return 190;	   // Bat
+		/** Soldier */
+		case 18: return 205;	// Rocket Launcher
+		case 6:
+			return 196;	   // Shovel
+		/** Pyro */
+		case 21: return 208;	// Flame Thrower
+		case 2:
+			return 192;	   // Fire Axe
+		/** Demoman */
+		case 19: return 206;	// Grenade Launcher
+		case 20: return 207;	// Stickybomb Launcher
+		case 1:
+			return 191;	   // Bottle
+		/** Heavy */
+		case 15: return 202;	// Minigun
+		case 5:
+			return 195;	   // Fists
+		/** Engineer */
+		case 7: return 197;	   // Wrench
+		case 25:
+			return 737;	   // Construction PDA
+		/** Medic */
+		case 17: return 204;	// Syringe Gun
+		case 29: return 211;	// Medigun
+		case 8:
+			return 198;	   // Bonesaw
+		/** Sniper */
+		case 14: return 201;	// Sniper Rifle
+		case 16: return 203;	// SMG
+		case 3:
+			return 193;	   // Kukri
+		/** Spy */
+		case 24: return 210;	 // Revolver
+		case 735: return 736;	 // Sapper
+		case 4: return 194;		 // Knife
+		case 30:
+			return 212;	   // Invis Watch
+		// If the provided item definition index is already a strange variant, return it as is.
+		case 199, 209, 200, 190, 205, 196, 208, 192, 206, 207, 191, 202, 195, 197, 737, 204, 211, 198, 201, 203, 193, 210, 736, 194, 212: return itemDefinitionIndex;
+	}
+
+	return -1;
+}
+
+/**
+ * Obtains a visual representation of a weapon slot.
+ *
+ * @param slot The slot ID to obtain the name for.
+ * @param buffer The buffer to store the slot name.
+ * @param size The size of the buffer.
+ *
+ * @return The name of the slot.
+ */
+stock void TF2ItemPlugin_GetWeaponSlotName(int slot, char[] buffer, int size)
+{
+	switch (slot)
+	{
+		case 0: strcopy(buffer, size, "Primary");
+		case 1: strcopy(buffer, size, "Secondary");
+		case 2: strcopy(buffer, size, "Melee");
+		case 3: strcopy(buffer, size, "PDA Slot 1");
+		case 4: strcopy(buffer, size, "PDA Slot 2");
+		case 5: strcopy(buffer, size, "Building Slot 1");
+		default: strcopy(buffer, size, "Unknown Slot");
+	}
+}
+
+/**
+ * Function that maps a War Paint wear value to a string representation.
+ *
+ * @param wear The War Paint wear value.
+ * @param buffer The buffer to store the string representation.
+ * @param size The size of the buffer.
+ *
+ * @return The string representation of the wear value.
+ */
+stock void TF2ItemPlugin_GetWarPaintWearString(float wear, char[] buffer, int size)
+{
+	switch (wear)
+	{
+		case -1.0: strcopy(buffer, size, "No Override");
+		case 0.0, 0.2: strcopy(buffer, size, "Factory New");
+		case 0.4: strcopy(buffer, size, "Minimal Wear");
+		case 0.6: strcopy(buffer, size, "Field-Tested");
+		case 0.8: strcopy(buffer, size, "Well-Worn");
+		case 1.0: strcopy(buffer, size, "Battle Scarred");
+		default: strcopy(buffer, size, "Unknown");
+	}
+}
+
+/**
+ * Obtains the player class of a client and returns it as an integer.
+ *
+ * @param client Client index to obtain the class for.
+ *
+ * @return The player class of the client.
+ */
+stock int TF2_GetPlayerClassInt(int client)
+{
+	return view_as<int>(TF2_GetPlayerClass(client));
+}
+
+enum
+{
+	TF2Weapon_NoAustralium = 0,
+	TF2Weapon_Australium   = 1,
+	TF2Weapon_Stock		   = 2,
+}
+
+/**
+ * Checks if a given item definition index can be an australium weapon.
+ *
+ * @param itemDefIndex The item definition index to check.
+ *
+ * @return A value indicating the item index's australium status.
+ * - 0: The item cannot be an australium weapon.
+ * - 1: The item can be an australium weapon.
+ * - 2: The item is a default weapon and should be converted to its strange variant.
+ */
+stock int
+	TF2ItemPlugin_CanItemAustralium(int iItemDefinitionIndex)
+{
+	switch (iItemDefinitionIndex)
+	{
+		case /** Unlockables */ 45, 228, 38, 132, 424, 141, 36, 61,
+			/** Strange variants */ 200, 205, 208, 206, 207, 202, 197, 211, 201, 203, 194: return TF2Weapon_Australium;
+		case /** Default weapons */ 13, 18, 21, 19, 20, 15, 7, 29, 14, 16, 4: return TF2Weapon_Stock;
+	}
+
+	return TF2Weapon_NoAustralium;
+}
+
+/**
+ * Determines if a given item definition index can be festivized.
+ *
+ * @param itemDefIndex The item definition index to check.
+ *
+ * @return True if the item can be festivized, false otherwise.
+ */
+stock bool
+	TF2ItemPlugin_CanItemFestivize(int iItemDefinitionIndex)
+{
+	// If this is not a valid definition index, return false.
+	if (!TF2Econ_IsValidItemDefinition(iItemDefinitionIndex)) return false;
+
+	// Check on TFEconData for the festivizer tag presence.
+	char canBeFestivized[2];
+	TF2Econ_GetItemDefinitionString(iItemDefinitionIndex, "tags/can_be_festivized", canBeFestivized, sizeof(canBeFestivized), "0");
+
+	// Return the result.
+	return view_as<bool>(StringToInt(canBeFestivized));
+}
+
+/**
+ * Applies changes to a weapon based on set inventory values.
+ *
+ * @param client The client ID to apply the changes for.
+ * @param slot Optional. If set, the slot on which to change after regenerating their loadout.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_ApplyWeaponChanges(int client, int slot = 0)
+{
+	// Get the actual HP, clip and ammo for the current weapon we're forcing the change on.
+	int	  hp   = GetClientHealth(client), clip[2], ammo[2];
+
+	// If the player is a Medic, we would also want to maintain their Übercharge for the change.
+	float uber = -1.0;
+
+	if (TF2_GetPlayerClass(client) == TFClass_Medic)
+		uber = GetEntPropFloat(GetPlayerWeaponSlot(client, 1), Prop_Send, "m_flChargeLevel");
+
+	// Fill the Ammo and Clip values for later restoration
+	for (int i = 0; i < sizeof(clip); i++)
+	{
+		int wep = GetPlayerWeaponSlot(client, i);
+		if (wep != INVALID_ENT_REFERENCE)
+		{
+			int ammoOff2 = GetEntProp(wep, Prop_Send, "m_iPrimaryAmmoType", 1) * 4 + ammoOff;
+
+			clip[i]		 = GetEntData(wep, clipOff);
+			ammo[i]		 = GetEntData(wep, ammoOff2);
+		}
+	}
+
+	// Remove all weapons from the client.
+	TF2_RemoveAllWeapons(client);
+
+	// Call the "Regenerate" function.
+	SDKCall(hRegen, client, 0);
+
+	// Restore everything
+	SetEntityHealth(client, hp);
+	if (uber > -1.0)
+		SetEntPropFloat(GetPlayerWeaponSlot(client, 1), Prop_Send, "m_flChargeLevel", uber);
+
+	for (int i = 0; i < sizeof(clip); i++)
+	{
+		int wep = GetPlayerWeaponSlot(client, i);
+		if (wep != INVALID_ENT_REFERENCE)
+		{
+			int ammoOff2 = GetEntProp(wep, Prop_Send, "m_iPrimaryAmmoType", 1) * 4 + ammoOff;
+
+			SetEntData(wep, clipOff, clip[i]);
+			SetEntData(wep, ammoOff2, ammo[i]);
+		}
+	}
+
+	// Set active weapon as the changed one
+	SetEntPropEnt(client, Prop_Send, "m_hActiveWeapon", GetPlayerWeaponSlot(client, slot));
+}
+
+/**
+ * Toggles a client's weapon slot override status.
+ *
+ * This activates and stores information when a client's weapon slot is actively overridden.
+ *
+ * @param client Client index to toggle the override status for.
+ * @param class The class to toggle the override status for.
+ * @param slot Slot ID to toggle the override status for.
+ * @param itemDefIndex The item definition index to override the slot with.
+ * @param quality Optional. The quality to override the slot with.
+ * @param level Optional. The level to override the slot with.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_ToggleSlotOverride(int client, int class, int slot, int itemDefIndex, int quality = -1, int level = -1)
+{
+	// Toggle the override status.
+	g_inventories[client][class][slot].isActiveOverride = !g_inventories[client][class][slot].isActiveOverride;
+
+	// Set the weapon information properly.
+	g_inventories[client][class][slot].weaponDefIndex	= itemDefIndex;
+	g_inventories[client][class][slot].class			= class;
+	g_inventories[client][class][slot].slotId			= slot;
+	g_inventories[client][class][slot].quality			= quality;
+	g_inventories[client][class][slot].level			= level;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Toggles a client's weapon australium status.
+ *
+ * @param client Client index to toggle the australium status for.
+ * @param slot Slot ID to toggle the australium status for.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_ToggleAustralium(int client, int slot)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Toggle the australium status for the slot.
+	g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isAustralium = !g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isAustralium;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+/**
+ * Toggles a client's weapon festive status.
+ *
+ * @param client Client index to toggle the festive status for.
+ * @param slot Slot ID to toggle the festive status for.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_ToggleFestive(int client, int slot)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Toggle the festive status for the slot.
+	g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isFestive = !g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isFestive;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][TF2_GetPlayerClassInt(client)][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+enum
+{
+	TF2Quality_Normal	  = 0,
+	TF2Quality_Genuine	  = 1,
+	TF2Quality_Vintage	  = 3,
+	TF2Quality_Unusual	  = 5,
+	TF2Quality_Unique	  = 6,
+	TF2Quality_Community  = 7,
+	TF2Quality_Valve	  = 8,
+	TF2Quality_SelfMade	  = 9,
+	TF2Quality_Strange	  = 11,
+	TF2Quality_Haunted	  = 13,
+	TF2Quality_Collectors = 14,
+	TF2Quality_Decorated  = 15,
+}
+
+/**
+ * Determines weapon quality based on a client's weapon preferences for a slot.
+ *
+ * @param client Client index to determine the quality for.
+ * @param class The class to determine the quality for.
+ * @param slot The slot to determine the quality for.
+ *
+ * @return The weapon quality for the specified slot.
+ */
+stock int
+	TF2ItemPlugin_GetWeaponQuality(int client, int class, int slot)
+{
+	// Check if there is a set unusual effect for this slot.
+	if (g_inventories[client][class][slot].unusualEffectId != -1)
+		return TF2Quality_Unusual;
+
+	// If there is a war paint set, return the decorated quality.
+	if (g_inventories[client][class][slot].warPaintId != -1)
+		return TF2Quality_Decorated;
+
+	// If nothing is set, return an invalid value.
+	return g_inventories[client][class][slot].quality != -1 ? g_inventories[client][class][slot].quality : -1;
+}
+
+/**
+ * Checks and applies a client's australium status to a weapon.
+ *
+ * @param client Client index to apply the australium status for.
+ * @param class The class to apply the australium status for.
+ * @param slot The slot to apply the australium status for.
+ * @param hItem The item handle to apply the australium status to.
+ * @param iItemDefinitionIndex The item definition index of the item.
+ *
+ * @return True if the item's properties were modified, false otherwise.
+ */
+stock bool
+	TF2ItemPlugin_TF2Items_ApplyAustralium(int client, int class, int slot, Handle& hItem, int iItemDefinitionIndex)
+{
+	// Check if the item can be an australium weapon.
+	int canAustralium = TF2ItemPlugin_CanItemAustralium(iItemDefinitionIndex);
+
+	switch (canAustralium)
+	{
+		case TF2Weapon_NoAustralium, TF2Weapon_Stock: return false;
+		case TF2Weapon_Australium:
+		{
+			// Set the item's australium status based on the client's preferences.
+			bool isAustralium = g_inventories[client][class][slot].isAustralium;
+
+			// If the override is not set, ignore the australium status.
+			if (!isAustralium)
+				return false;
+
+			// If the client wants the weapon to be australium, set the item's properties.
+			TF2Items_SetAttribute(hItem, 0, 2027, 1.0);
+			TF2Items_SetAttribute(hItem, 1, 2022, 1.0);
+			TF2Items_SetAttribute(hItem, 2, 542, 1.0);
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Checks and applies a clients' current festive status to a weapon.
+ *
+ * @param client Client index to apply the festive status for.
+ * @param class The class to apply the festive status for.
+ * @param slot The slot to apply the festive status for.
+ * @param hItem The item handle to apply the festive status to.
+ * @param iItemDefinitionIndex The item definition index of the item.
+ *
+ * @return True if the item's properties were modified, false otherwise.
+ */
+stock bool
+	TF2ItemPlugin_TF2Items_ApplyFestive(int client, int class, int slot, Handle& hItem, int iItemDefinitionIndex)
+{
+	// Check if the item can be festivized.
+	bool canFestivize = TF2ItemPlugin_CanItemFestivize(iItemDefinitionIndex);
+
+	// If the item cannot be festivized, return false.
+	if (!canFestivize)
+		return false;
+
+	// Set the item's festive status based on the client's preferences.
+	bool isFestive = g_inventories[client][class][slot].isFestive;
+
+	// If the client wants the weapon to be festive, set the item's properties.
+	TF2Items_SetAttribute(hItem, 3, 2053, isFestive ? 1.0 : 0.0);
+
+	return true;
+}
+
+/**
+ * Applies a client's preferences for a weapon to an `hItem` `Handle`.
+ *
+ * Keep in mind this should be called with a valid/existing `Handle` to a weapon (from 'TF2Items_OnGiveNamedItem')
+ * Attribute slot hirearchy is as follows:
+ * - 0, 1, 2: Australium
+ * - 3: Festivizer
+ * - 4, 5, 6: Killstreaks
+ * - 7, 8: War Paint
+ * - 9, 10, 11: Spells
+ * - 12: Unusual Effect
+ *
+ * @param client Client index to apply the preferences for.
+ * @param class The class to apply the preferences for.
+ * @param slot The slot to apply the preferences for.
+ * @param className The weapon's original class name.
+ * @param iItemDefinitionIndex The item definition index of the weapon about to be created.
+ * @param hItem The item handle to apply the preferences to.
+ * @param isCreatingStrangeVariant Optional. If set, will create a new item instance instead of modifying the existing one.
+ *
+ * @return `Plugin_Changed` if the item's properties were modified, `Plugin_Handled` if a new creation was instanced and `Plugin_Continue` otherwise.
+ */
+stock Action TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class, int slot, char[] className, int iItemDefinitionIndex, Handle& hItem, bool isCreatingStrangeVariant = false)
+{
+	// Create a new item handle.
+	hItem = TF2Items_CreateItem(OVERRIDE_ALL | PRESERVE_ATTRIBUTES);
+
+	// Obtain the client's inventory instance for this class and slot.
+	TFInventory_Weapons_Slot inventorySlot;
+	inventorySlot = g_inventories[client][class][slot];
+
+	// Set the item's preliminary properties.
+	TF2Items_SetItemIndex(hItem, iItemDefinitionIndex);
+	TF2Items_SetLevel(hItem, inventorySlot.level != -1 ? inventorySlot.level : 5);
+
+	// Determine the quality of the item based on set overrides.
+	int quality = TF2ItemPlugin_GetWeaponQuality(client, class, slot);
+
+	// If quality is -1, set the original quality.
+	TF2Items_SetQuality(hItem, quality != -1 ? quality : TF2Quality_Unique);
+
+	// Set the item's classname.
+	TF2Items_SetClassname(hItem, className);
+
+	// Set the maximum amount of attributes possible on the weapon.
+	TF2Items_SetNumAttributes(hItem, 13);
+
+	TF2ItemPlugin_TF2Items_ApplyAustralium(client, class, slot, hItem, iItemDefinitionIndex);
+	TF2ItemPlugin_TF2Items_ApplyFestive(client, class, slot, hItem, iItemDefinitionIndex);
+
+	// If the strange variant is being created, give the named item and properly equip it on the player.
+	if (isCreatingStrangeVariant)
+	{
+		// Remove any weapons they could have equipped on the slot.
+		int currentWeapon = GetPlayerWeaponSlot(client, slot);
+
+		if (currentWeapon != -1)
+			TF2_RemoveWeaponSlot(client, slot);
+
+		// Give the item to the player.
+		int weaponEntity = TF2Items_GiveNamedItem(client, hItem);
+
+		// Equip it on the player.
+		EquipPlayerWeapon(client, weaponEntity);
+	}
+
+	// Return the appropriate action based on the item creation status.
+	return isCreatingStrangeVariant ? Plugin_Handled : Plugin_Changed;
+}
+
+public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDefinitionIndex, Handle& hItem)
+{
+	// Ignore cosmetic items.
+	if (StrContains(classname, "tf_wearable", false) != -1) return Plugin_Continue;
+
+	// Identify the weapon slot via the item definition index.
+	int slot = -1, class = TF2_GetPlayerClassInt(client);
+
+	for (int i = 0; i < MAX_WEAPONS; i++)
+	{
+		// Compare the current weapon's definition index with the one we're looking for.
+		if (g_inventories[client][class][i].weaponDefIndex == iItemDefinitionIndex || g_inventories[client][class][i].stockWeaponDefIndex == iItemDefinitionIndex)
+		{
+			// Set if found and break the loop.
+			slot = i;
+			break;
+		}
+	}
+
+	// If no slot was found, return the default action and continue.
+	if (slot == -1)
+		return Plugin_Continue;
+
+	// If the slot is found, apply the specified overrides only if they are active for said slot.
+	if (!g_inventories[client][class][slot].isActiveOverride)
+		return Plugin_Continue;
+
+	// If this is an overriden weapon and their item index corresponds to a stock weapon, create a strange variant instead.
+	if (g_inventories[client][class][slot].stockWeaponDefIndex != -1)
+	{
+		PrintToServer("DEBUG: %d requires conversion.", iItemDefinitionIndex);
+
+		// Create a `DataPack` to transfer the necessary information to the next frame.
+		DataPack data = new DataPack();
+		data.WriteCell(client);
+		data.WriteCell(class);
+		data.WriteCell(slot);
+		data.WriteString(classname);
+		data.WriteCell(iItemDefinitionIndex);
+
+		// Create a timer to give the item after the current frame.
+		CreateTimer(0.0, TF2ItemPlugin_TF2Items_HandleStockWeaponConversion, data);
+
+		// Disallow the current item creation.
+		return Plugin_Handled;
+	}
+
+	// If the stock weapon definition index is set, reset it.
+	if (g_inventories[client][class][slot].stockWeaponDefIndex != iItemDefinitionIndex)
+		g_inventories[client][class][slot].stockWeaponDefIndex = -1;
+
+	// Apply the client's preferences to the weapon.
+	return TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(client, class, slot, classname, iItemDefinitionIndex, hItem);
+}
+
+public Action TF2ItemPlugin_TF2Items_HandleStockWeaponConversion(Handle timer, DataPack pack)
+{
+	// Reset the DataPack to its first index.
+	pack.Reset();
+
+	// Unpack the data.
+	int client = pack.ReadCell(),
+		class  = pack.ReadCell(),
+		slot   = pack.ReadCell();
+
+	char className[64];
+	pack.ReadString(className, sizeof(className));
+
+	int iItemDefinitionIndex		  = pack.ReadCell();
+
+	// Convert the item definition index to its strange variant.
+	int strangeVariantDefinitionIndex = TF2ItemPlugin_GetStrangeVariant(iItemDefinitionIndex);
+
+	// If an invalid item definition index was returned, return the default action and continue.
+	if (strangeVariantDefinitionIndex == -1)
+	{
+		PrintToServer("FATAL ERROR: For client %d obtained item def index %d but could not find a valid strange variant (%d)", client, iItemDefinitionIndex, strangeVariantDefinitionIndex);
+
+		delete pack;
+
+		return Plugin_Stop;
+	}
+
+	// Pass `hItem` as an empty handle for the new item to be created.
+	Handle hItem = INVALID_HANDLE;
+
+	// Fire a new item modification with the same parameters, but with the creation flag on and the strange variants' definition index.
+	TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(client, class, slot, className, strangeVariantDefinitionIndex, hItem, true);
+
+	// Set the original stock weapon definition index to the new item.
+	g_inventories[client][class][slot].stockWeaponDefIndex = iItemDefinitionIndex;
+
+	// Delete the timer and the DataPack to free memory.
+	delete pack;
+
+	return Plugin_Stop;
+}
+
+public void TF2Items_OnGiveNamedItem_Post(int client, char[] classname, int iItemDefinitionIndex, int itemLevel, int itemQuality, int entityIndex)
+{
+	// Attach the `m_bValidatedAttachedEntity` property to every weapon/cosmetic.
+	if (HasEntProp(entityIndex, Prop_Send, "m_bValidatedAttachedEntity"))
+		SetEntProp(entityIndex, Prop_Send, "m_bValidatedAttachedEntity", 1);
+}
