@@ -1,3 +1,9 @@
+/** Global variable used to check if a player is currently searching for a War Paint by name on chat. */
+bool	 g_isSearchingForWarPaint[MAXPLAYERS + 1];
+
+/** Global variable that saves menu state between a search and the results. */
+DataPack g_searchData[MAXPLAYERS + 1];
+
 /**
  * Callback handler for the main menu selections.
  */
@@ -112,6 +118,15 @@ public int WeaponMenuHandler(Menu menu, MenuAction action, int client, int param
 			{
 				// Open the sub-menu for the unusual effect selection.
 				TF2ItemPlugin_Menus_UnusualMenu(client, slot, weaponName, weapon);
+
+				// Prevent a rebuild of the next menu.
+				return 0;
+			}
+
+			if (StrEqual(option, "warPaint"))
+			{
+				// Open the sub-menu for the War Paint selection.
+				TF2ItemPlugin_Menus_WarPaintMenu(client, slot, weaponName, weapon);
 
 				// Prevent a rebuild of the next menu.
 				return 0;
@@ -411,4 +426,157 @@ public int UnusualMenuHandler(Menu menu, MenuAction action, int client, int para
 	}
 
 	return 0;
+}
+
+/**
+ * Callback that handles War Paint menu selections.
+ */
+public int WarPaintMenuHandler(Menu menu, MenuAction action, int client, int param)
+{
+	// Obtain the hidden parameters' information.
+	char weaponStr[12], slotStr[2], weaponName[64];
+	menu.GetItem(0, weaponName, sizeof(weaponName));
+	menu.GetItem(1, weaponStr, sizeof(weaponStr));
+	menu.GetItem(2, slotStr, sizeof(slotStr));
+
+	// Convert the weapon string to an integer.
+	int weapon = StringToInt(weaponStr), slot = StringToInt(slotStr);
+
+	// If client had changed classes or the weapon entity is no longer valid, return and do nothing.
+	if (!IsValidEdict(weapon) || !IsValidEdict(client)) return 0;
+
+	// If the weapon edict is not a weapon, return and do nothing.
+	char edictClassName[64];
+	GetEdictClassname(weapon, edictClassName, sizeof(edictClassName));
+
+	if (StrContains(edictClassName, "tf_weapon_", false) == -1 && !StrEqual(edictClassName, "saxxy")) return 0;
+
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			// Obtain the selected option.
+			char option[64];
+			menu.GetItem(param, option, sizeof(option));
+
+			// Transform the option to an integer.
+			int paint = StringToInt(option);
+
+			// Handle the selected option.
+			if (StrEqual(option, "clear"))
+				// Reset the War Paint to its default value.
+				TF2ItemPlugin_SetWarPaint(client, slot, -1);
+
+			if (StrEqual(option, "search"))
+			{
+				// Set the player as searching for a War Paint by name.
+				g_isSearchingForWarPaint[client] = true;
+
+				// Build a DataPack to transfer weapon & slot information to the search handler.
+				DataPack data					 = new DataPack();
+				data.WriteCell(slot);
+				data.WriteCell(weapon);
+				data.WriteString(weaponName);
+
+				g_searchData[client] = data;
+
+				// Initiate a timer to timeout the user's search.
+				float timeOut		 = g_cvar_weapons_searchTimeout.FloatValue;
+				CreateTimer(timeOut, TF2ItemPlugin_WarPaintSearchTimeoutHandler, client, TIMER_FLAG_NO_MAPCHANGE);
+
+				// Print a message to the player's chat to inform them of the search.
+				CPrintToChat(client, "%s Enter the name of the War Paint you want to search for. You have %d second(s).", PLUGIN_CHATTAG, RoundToNearest(timeOut));
+
+				return 0;
+			}
+
+			else
+				// Set the War Paint accordingly.
+				TF2ItemPlugin_SetWarPaint(client, slot, paint);
+
+			// Rebuild the War Paint menu after some miliseconds to allow for the changes to take effect.
+			DataPack data = new DataPack();
+			data.WriteCell(client);
+			data.WriteCell(slot);
+			data.WriteString(weaponName);
+			data.WriteString("rebuild_war_paint");
+
+			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+		}
+		case MenuAction_Cancel:
+		{
+			// Check if the user tried going back.
+			if (param == MenuCancel_ExitBack)
+				// Rebuild the weapon menu.
+				TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
+		}
+	}
+
+	return 0;
+}
+
+public Action OnClientSayCommand(int client, const char[] command, const char[] query)
+{
+	// Ignore non-searching players.
+	if (!g_isSearchingForWarPaint[client]) return Plugin_Continue;
+
+	// Take the query and search for a War Paint with that name (or ID) (case-insensitive).
+	StringMap paints[MAX_PAINTS];
+
+	int		  lastInsertedPaintIndex = 0;
+	for (int i = 0; i < MAX_PAINTS; i++)
+	{
+		if (g_paintKits[i] == null) continue;
+
+		// Obtain the paint kit name.
+		char paintName[128];
+		g_paintKits[i].GetString("name", paintName, sizeof(paintName));
+
+		// Check if the paint name contains the query.
+		if (StrContains(paintName, query, false) != -1)
+		{
+			// Store the paint kit information on the global variable.
+			paints[lastInsertedPaintIndex] = new StringMap();
+
+			int id						   = -1;
+			g_paintKits[i].GetValue("id", id);
+
+			paints[lastInsertedPaintIndex].SetValue("id", id);
+			paints[lastInsertedPaintIndex].SetString("name", paintName);
+
+			lastInsertedPaintIndex++;
+		}
+	}
+
+	// Turn off the search status.
+	g_isSearchingForWarPaint[client] = false;
+
+	// Fetch the DataPack from the global.
+	DataPack data					 = g_searchData[client];
+	data.Reset();
+
+	int	 slot = data.ReadCell(), weapon = data.ReadCell();
+	char weaponName[64];
+	data.ReadString(weaponName, sizeof(weaponName));
+
+	// Clear the old DataPack.
+	delete g_searchData[client];
+
+	// Build and open the results menu with the result paints.
+	TF2ItemPlugin_Menus_WarPaintMenu_SearchResults(client, slot, weaponName, weapon, paints, lastInsertedPaintIndex + 1);
+
+	return Plugin_Handled;
+}
+
+public Action TF2ItemPlugin_WarPaintSearchTimeoutHandler(Handle timer, int client)
+{
+	if (!g_isSearchingForWarPaint[client]) return Plugin_Stop;
+
+	// Reset the player's search status.
+	g_isSearchingForWarPaint[client] = false;
+
+	// Print a message to the player's chat to inform them of the timeout.
+	CPrintToChat(client, "%s Your War Paint search has timed out.", PLUGIN_CHATTAG);
+
+	return Plugin_Stop;
 }

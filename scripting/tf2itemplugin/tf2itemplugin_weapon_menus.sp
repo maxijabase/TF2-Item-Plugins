@@ -147,24 +147,24 @@ void TF2ItemPlugin_Menus_WeaponMenu(int client, int slot, char[] name, int weapo
 
 	// Add the Australium option.
 	int canAustralium = TF2ItemPlugin_CanItemAustralium(inventory.weaponDefIndex);
-	weaponMenu.AddItem("australium", (canAustralium != TF2Weapon_NoAustralium ? (inventory.isAustralium ? "[X] Australium" : "[ ] Australium") : "Weapon cannot be australium"), canAustralium != TF2Weapon_NoAustralium ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+	weaponMenu.AddItem("australium", (canAustralium != TF2Weapon_NoAustralium ? (inventory.isAustralium ? "[X] Australium" : "[ ] Australium") : "Weapon cannot be australium"), inventory.isActiveOverride && canAustralium != TF2Weapon_NoAustralium ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Add the Festive option.
 	bool canFestivizer = TF2ItemPlugin_CanItemFestivize(inventory.weaponDefIndex);
-	weaponMenu.AddItem("festive", (canFestivizer ? (inventory.isFestive ? "[X] Festive" : "[ ] Festive") : "Weapon cannot be festivized"), canFestivizer ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+	weaponMenu.AddItem("festive", (canFestivizer ? (inventory.isFestive ? "[X] Festive" : "[ ] Festive") : "Weapon cannot be festivized"), canFestivizer && inventory.isActiveOverride ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	// Check if the weapon can be painted.
+	bool canBePainted = TF2ItemPlugin_CanItemWarPaint(inventory.weaponDefIndex);
 
 	// Add the War Paint ID option.
-	char warPaint[64];
-	Format(warPaint, sizeof(warPaint), "War Paint ID: %d", inventory.warPaintId);
-
-	weaponMenu.AddItem("warPaintId", warPaint, ITEMDRAW_DISABLED);
+	weaponMenu.AddItem("warPaint", canBePainted ? "War Paints" : "Item cannot be painted", inventory.isActiveOverride && canBePainted ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Add the War Paint Wear option.
 	char warPaintWear[32];
 	TF2ItemPlugin_GetWarPaintWearString(inventory.warPaintWear, warPaintWear, sizeof(warPaintWear));
 	Format(warPaintWear, sizeof(warPaintWear), "War Paint Wear: %s", warPaintWear);
 
-	weaponMenu.AddItem("warPaintWear", warPaintWear, ITEMDRAW_DISABLED);
+	weaponMenu.AddItem("warPaintWear", canBePainted ? warPaintWear : "Item paint wear cannot be changed.", inventory.isActiveOverride && canBePainted ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Add the Unusual Effect ID option.
 	char unusualEffect[64];
@@ -518,6 +518,153 @@ void TF2ItemPlugin_Menus_UnusualMenu(int client, int slot, char[] name, int weap
 
 	// Display the menu.
 	unusualMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
+ * Generates a menu with a list of all war paints to select from.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_WarPaintMenu(int client, int slot, char[] name, int weapon)
+{
+	// Create the new menu handle.
+	Menu warPaintMenu = new Menu(WarPaintMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class		  = TF2_GetPlayerClassInt(client);
+
+	// Access the inventory configuration.
+	TFInventory_Weapons_Slot inventory;
+	inventory = g_inventories[client][class][slot];
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	warPaintMenu.SetTitle("Weapons / %s / %s / War Paint", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	warPaintMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	warPaintMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	warPaintMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+
+	// Add a special option to clear the war paint.
+	warPaintMenu.AddItem("clear", "Clear my selection", inventory.warPaintId != -1 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+	warPaintMenu.AddItem("search", "Search by name or ID");
+
+	// Add an information item to check their war paint override status.
+	char warPaintName[64];
+	TF2ItemPlugin_GetWarPaintName(inventory.warPaintId, warPaintName, sizeof(warPaintName));
+	Format(warPaintName, sizeof(warPaintName), "Selected War Paint: %s", inventory.warPaintId == -1 ? "No War Paint" : warPaintName);
+
+	warPaintMenu.AddItem("", inventory.isActiveOverride && inventory.warPaintId == -1 ? "No War Paint override yet. Select one." : warPaintName, ITEMDRAW_DISABLED);
+
+	// Iterate over the list to find the war paint.
+	for (int i = 0; i < sizeof(g_paintKits); i++)
+	{
+		if (g_paintKits[i] == null) continue;
+
+		// Get their ID.
+		int id = -1;
+		g_paintKits[i].GetValue("id", id);
+
+		// Skip invalid ID numbers.
+		if (id == -1) continue;
+
+		// Get the war paint name.
+		char paintName[128];
+		g_paintKits[i].GetString("name", paintName, sizeof(paintName));
+
+		// Add the war paint to the menu.
+		char paintIdStr[12];
+		IntToString(id, paintIdStr, sizeof(paintIdStr));
+
+		warPaintMenu.AddItem(paintIdStr, paintName);
+	}
+
+	// Configure the menu's options.
+	warPaintMenu.ExitBackButton = true;
+
+	// Display the menu.
+	warPaintMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
+ * Generates a results menu for after a search is done on the war paint menu.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ * @param results Array of StringMap instances containing the search results.
+ * @param resultsCount Number of results in the array.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_WarPaintMenu_SearchResults(int client, int slot, char[] name, int weapon, StringMap[] results, int resultsCount)
+{
+	// Create the new menu handle.
+	Menu warPaintSearchResultsMenu = new Menu(WarPaintMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class					   = TF2_GetPlayerClassInt(client);
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	warPaintSearchResultsMenu.SetTitle("Weapons / %s / %s / War Paint / Search Results", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	warPaintSearchResultsMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	warPaintSearchResultsMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	warPaintSearchResultsMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+
+	// Add an informative item about the results.
+	warPaintSearchResultsMenu.AddItem("", "If your results are not what you expected, you can go back and search again.", ITEMDRAW_DISABLED);
+	warPaintSearchResultsMenu.AddItem("", "Below are the search results for your query:", ITEMDRAW_DISABLED);
+
+	// Iterate over the list to find the war paint.
+	for (int i = 0; i < resultsCount; i++)
+	{
+		if (results[i] == null) continue;
+
+		// Get their ID.
+		int id = -1;
+		results[i].GetValue("id", id);
+
+		// Skip invalid ID numbers.
+		if (id == -1) continue;
+
+		// Get the war paint name.
+		char paintName[128];
+		results[i].GetString("name", paintName, sizeof(paintName));
+
+		// Add the war paint to the menu.
+		char paintIdStr[12];
+		IntToString(id, paintIdStr, sizeof(paintIdStr));
+
+		warPaintSearchResultsMenu.AddItem(paintIdStr, paintName);
+	}
+
+	// Configure the menu's options.
+	warPaintSearchResultsMenu.ExitBackButton = true;
+
+	// Display the menu.
+	warPaintSearchResultsMenu.Display(client, MENU_TIME_FOREVER);
 }
 
 /**

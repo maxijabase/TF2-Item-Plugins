@@ -5,6 +5,9 @@
 #include <sdkhooks>
 #include <sdktools>
 
+#include <SteamWorks>
+#include <smjansson>
+
 #include <morecolors>
 
 #include <tf2items>

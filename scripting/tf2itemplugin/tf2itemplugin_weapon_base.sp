@@ -1,5 +1,6 @@
 #define MAX_WEAPONS					   3
 #define MAX_CLASSES					   9
+#define MAX_PAINTS					   1024
 
 #define WeaponSpell_Exorcism		   (1 << 0)
 #define WeaponSpell_SpectralFlames	   (1 << 1)
@@ -11,6 +12,9 @@
 
 /** Local memory copy where client inventories are stored for server use. */
 TFInventory_Weapons_Slot g_inventories[MAXPLAYERS + 1][MAX_CLASSES][MAX_WEAPONS];
+
+/** A list of paint kits available for the plugin to use. */
+StringMap				 g_paintKits[MAX_PAINTS];
 
 // Network prop for weapon clip.
 int						 clipOff;
@@ -25,7 +29,11 @@ Handle					 hRegen = INVALID_HANDLE;
 bool					 g_bInSpawnRoom[MAXPLAYERS + 1];
 
 /** ConVar that controls if weapon changes are only allowed when the player is within a spawn room. */
-stock ConVar			 g_cvar_weapons_onlySpawn;
+stock ConVar			 g_cvar_weapons_onlySpawn,
+	/** ConVar that indicates the URL where the updated list of TF2 paint kit definitions is. */
+	g_cvar_weapons_paintKitsUrl,
+	/** ConVar that controls the maximum time a user has to search for a war paint name in chat. */
+	g_cvar_weapons_searchTimeout;
 
 /**
  * Obtains the class name of a class ID for visual representation.
@@ -36,7 +44,7 @@ stock ConVar			 g_cvar_weapons_onlySpawn;
  *
  * @return void
  */
-stock void				 TF2ItemPlugin_GetTFClassName(TFClassType class, char[] buffer, int size)
+stock void TF2ItemPlugin_GetTFClassName(TFClassType class, char[] buffer, int size)
 {
 	switch (class)
 	{
@@ -299,6 +307,55 @@ stock void
 }
 
 /**
+ * Function that maps a War Paint ID to its corresponding name.
+ *
+ * @param warPaintId The War Paint ID.
+ * @param buffer The buffer to store the string representation.
+ * @param size The size of the buffer.
+ *
+ * @return void
+ */
+stock void
+	TF2ItemPlugin_GetWarPaintName(int warPaintId, char[] buffer, int size)
+{
+	// If no war paints are available, return "None".
+	int amount = 0;
+	for (int i = 0; i < sizeof(g_paintKits); i++)
+	{
+		if (g_paintKits[i] != null)
+			amount++;
+	}
+
+	if (amount == 0)
+	{
+		strcopy(buffer, size, "None");
+		return;
+	}
+
+	// Transform the war paint ID into a string.
+	char id[16];
+	IntToString(warPaintId, id, sizeof(id));
+
+	// Find the War Paint ID in the list of paint kits.
+	char name[128];
+	for (int i = 0; i < amount; i++)
+	{
+		int paintKitId = -1;
+		g_paintKits[i].GetValue("id", paintKitId);
+
+		if (paintKitId == warPaintId)
+		{
+			g_paintKits[i].GetString("name", name, sizeof(name));
+			strcopy(buffer, size, name);
+			return;
+		}
+	}
+
+	// If the War Paint ID was not found, return the ID as a string.
+	strcopy(buffer, size, id);
+}
+
+/**
  * Function that maps a War Paint wear value to a string representation.
  *
  * @param wear The War Paint wear value.
@@ -383,6 +440,27 @@ stock bool
 
 	// Return the result.
 	return view_as<bool>(StringToInt(canBeFestivized));
+}
+
+/**
+ * Determines if a given item definition index can be war painted.
+ *
+ * @param itemDefIndex The item definition index to check.
+ *
+ * @return True if the item can be war painted, false otherwise.
+ */
+stock bool
+	TF2ItemPlugin_CanItemWarPaint(int iItemDefinitionIndex)
+{
+	// If this is not a valid definition index, return false.
+	if (!TF2Econ_IsValidItemDefinition(iItemDefinitionIndex)) return false;
+
+	// Check on TFEconData for the paint kit tag presence.
+	char prefab[64];
+	TF2Econ_GetItemDefinitionString(iItemDefinitionIndex, "prefab", prefab, sizeof(prefab), "");
+
+	// Return the result.
+	return (StrContains(prefab, "paintkit_base", false) != -1);
 }
 
 /**
@@ -755,6 +833,34 @@ stock void TF2ItemPlugin_SetUnusualEffect(int client, int slot, int unusualEffec
 		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
 }
 
+/**
+ * Sets the War Paint ID for the override.
+ *
+ * If set to -1, the override will be ignored.
+ *
+ * @param client Client index to set the war paint override status for.
+ * @param slot Slot ID to set the war paint override status for.
+ * @param warPaintId The War Paint ID to set the override to.
+ *
+ * @return void
+ */
+stock void TF2ItemPlugin_SetWarPaint(int client, int slot, int warPaintId)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class									  = TF2_GetPlayerClassInt(client);
+
+	// Toggle the war paint override status for the slot.
+	g_inventories[client][class][slot].warPaintId = warPaintId;
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
 enum
 {
 	TF2Quality_Normal	  = 0,
@@ -980,6 +1086,45 @@ stock bool
 }
 
 /**
+ * Applies a War Paint configuration to a weapon.
+ *
+ * @param client Client index to apply the War Paint configuration for.
+ * @param class The class to apply the War Paint configuration for.
+ * @param slot The slot to apply the War Paint configuration for.
+ * @param hItem The item handle to apply the War Paint configuration to.
+ * @param iItemDefinitionIndex The item definition index of the item.
+ *
+ * @return True if the item's properties were modified, false otherwise.
+ */
+stock bool TF2ItemPlugin_TF2Items_ApplyWarPaint(int client, int class, int slot, Handle& hItem, int iItemDefinitionIndex)
+{
+	// Check if the item can be war painted.
+	bool canWarPaint = TF2ItemPlugin_CanItemWarPaint(iItemDefinitionIndex);
+
+	// If the item cannot be war painted, return false.
+	if (!canWarPaint)
+		return false;
+
+	// Set the item's War Paint based on the client's preferences.
+	int warPaintId = g_inventories[client][class][slot].warPaintId;
+
+	// If the War Paint is set to None or disabled, return false.
+	if (warPaintId == -1)
+		return false;
+
+	// Set the item's War Paint.
+	TF2Items_SetAttribute(hItem, 7, 834, float(warPaintId));
+
+	// Obtain the wear value for the override.
+	float wear = g_inventories[client][class][slot].warPaintWear;
+
+	// If the wear value is set, apply it to the War Paint, if not just go with Factory New as a default.
+	TF2Items_SetAttribute(hItem, 8, 725, wear != -1 ? wear : 0.0);
+
+	return true;
+}
+
+/**
  * Applies a client's preferences for a weapon to an `hItem` `Handle`.
  *
  * Keep in mind this should be called with a valid/existing `Handle` to a weapon (from 'TF2Items_OnGiveNamedItem')
@@ -1001,7 +1146,8 @@ stock bool
  *
  * @return `Plugin_Changed` if the item's properties were modified, `Plugin_Handled` if a new creation was instanced and `Plugin_Continue` otherwise.
  */
-stock Action TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class, int slot, char[] className, int iItemDefinitionIndex, Handle& hItem, bool isCreatingStrangeVariant = false)
+stock Action
+	TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class, int slot, char[] className, int iItemDefinitionIndex, Handle& hItem, bool isCreatingStrangeVariant = false)
 {
 	// Create a new item handle.
 	hItem = TF2Items_CreateItem(OVERRIDE_ALL | PRESERVE_ATTRIBUTES);
@@ -1031,6 +1177,7 @@ stock Action TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class
 	TF2ItemPlugin_TF2Items_ApplyKillstreak(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplySpell(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyUnusualEffect(client, class, slot, hItem, iItemDefinitionIndex);
+	TF2ItemPlugin_TF2Items_ApplyWarPaint(client, class, slot, hItem, iItemDefinitionIndex);
 
 	// If the strange variant is being created, give the named item and properly equip it on the player.
 	if (isCreatingStrangeVariant)
