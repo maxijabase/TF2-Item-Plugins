@@ -132,6 +132,15 @@ public int WeaponMenuHandler(Menu menu, MenuAction action, int client, int param
 				return 0;
 			}
 
+			if (StrEqual(option, "warPaintWear"))
+			{
+				// Open the sub-menu for the War Paint wear selection.
+				TF2ItemPlugin_Menus_WarPaintWearMenu(client, slot, weaponName, weapon);
+
+				// Prevent a rebuild of the next menu.
+				return 0;
+			}
+
 			// Rebuild the weapons menu after some miliseconds to allow for the changes to take effect (probably a strange variant being given).
 			DataPack data = new DataPack();
 			data.WriteCell(client);
@@ -139,7 +148,7 @@ public int WeaponMenuHandler(Menu menu, MenuAction action, int client, int param
 			data.WriteString(weaponName);
 			data.WriteString("rebuild_weapons");
 
-			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(0.15, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		case MenuAction_Cancel:
 		{
@@ -218,7 +227,7 @@ public int KillstreakMenuHandler(Menu menu, MenuAction action, int client, int p
 			data.WriteString(weaponName);
 			data.WriteString("rebuild_killstreak");
 
-			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(0.15, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		case MenuAction_Cancel:
 		{
@@ -282,7 +291,7 @@ public int KillstreakOptionsMenuHandler(Menu menu, MenuAction action, int client
 			data.WriteString(weaponName);
 			data.WriteString("rebuild_killstreak");
 
-			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(0.15, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		case MenuAction_Cancel:
 		{
@@ -350,7 +359,7 @@ public int SpellsMenuHandler(Menu menu, MenuAction action, int client, int param
 			data.WriteString(weaponName);
 			data.WriteString("rebuild_spells");
 
-			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(0.15, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		case MenuAction_Cancel:
 		{
@@ -414,7 +423,7 @@ public int UnusualMenuHandler(Menu menu, MenuAction action, int client, int para
 			data.WriteString(weaponName);
 			data.WriteString("rebuild_unusual");
 
-			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(0.15, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		case MenuAction_Cancel:
 		{
@@ -501,7 +510,65 @@ public int WarPaintMenuHandler(Menu menu, MenuAction action, int client, int par
 			data.WriteString(weaponName);
 			data.WriteString("rebuild_war_paint");
 
-			CreateTimer(0.5, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(0.15, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
+		}
+		case MenuAction_Cancel:
+		{
+			// Check if the user tried going back.
+			if (param == MenuCancel_ExitBack)
+				// Rebuild the weapon menu.
+				TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
+		}
+	}
+
+	return 0;
+}
+
+public int WarPaintWearMenuHandler(Menu menu, MenuAction action, int client, int param)
+{
+	// Obtain the hidden parameters' information.
+	char weaponStr[12], slotStr[2], weaponName[64];
+	menu.GetItem(0, weaponName, sizeof(weaponName));
+	menu.GetItem(1, weaponStr, sizeof(weaponStr));
+	menu.GetItem(2, slotStr, sizeof(slotStr));
+
+	// Convert the weapon string to an integer.
+	int weapon = StringToInt(weaponStr), slot = StringToInt(slotStr);
+
+	// If client had changed classes or the weapon entity is no longer valid, return and do nothing.
+	if (!IsValidEdict(weapon) || !IsValidEdict(client)) return 0;
+
+	// If the weapon edict is not a weapon, return and do nothing.
+	char edictClassName[64];
+	GetEdictClassname(weapon, edictClassName, sizeof(edictClassName));
+
+	if (StrContains(edictClassName, "tf_weapon_", false) == -1 && !StrEqual(edictClassName, "saxxy")) return 0;
+
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			// Obtain the selected option.
+			char option[64];
+			menu.GetItem(param, option, sizeof(option));
+
+			// Transform the option to a float.
+			int	  wearIndex = StringToInt(option);
+
+			// Obtain the floating value.
+			float wear		= TF2ItemPlugin_GetPaintWearFromIndex(wearIndex);
+
+			// Set the War Paint wear accordingly.
+			TF2ItemPlugin_SetWarPaintWear(client, slot, wear);
+
+			// Rebuild the War Paint menu after some miliseconds to allow for the changes to take effect.
+			DataPack data = new DataPack();
+			data.WriteCell(client);
+			data.WriteCell(slot);
+			data.WriteString(weaponName);
+			data.WriteString("rebuild_war_paint");
+
+			CreateTimer(0.15, TF2ItemPlugin_Menus_HandleMenuRebuild, data, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		case MenuAction_Cancel:
 		{

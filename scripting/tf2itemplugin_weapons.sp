@@ -101,8 +101,9 @@ public void OnPluginStart()
 		RegAdminCmd(commandNames[i], CMD_TF2ItemPlugin_WeaponManager, ADMFLAG_GENERIC, "Manage weapons on the server.");
 
 #if defined DEBUG
-	// Register a debug command to print the player's inventory state.
 	RegAdminCmd("sm_weapons_debug", CMD_TF2ItemPlugin_DebugInventory, ADMFLAG_GENERIC, "Print the player's inventory state.");
+	RegAdminCmd("sm_weapons_debug_current", CMD_TF2ItemPlugin_DebugCurrent, ADMFLAG_GENERIC, "Print the player's current weapon state.");
+	RegAdminCmd("sm_weapons_debug_force_call", CMD_TF2ItemPlugin_ForceCall, ADMFLAG_GENERIC, "Force a call to the Regenerate function.");
 #endif
 }
 
@@ -145,7 +146,7 @@ public Action CMD_TF2ItemPlugin_WeaponManager(int client, int args)
 
 void		Print_Slot(int client, int class, int slot)
 {
-	PrintToConsole(client, "Slot %d:\n" ... "Client ID: %d\n" ... "Class ID: %d\n" ... "Slot ID: %d\n" ... "Active Override: %d\n" ... "Weapon Def Index: %d\n" ... "Stock Def Index: %d\n" ... "Quality: %d\n" ... "Level: %d\n" ... "Australium: %d\n" ... "Festive: %d\n" ... "Unusual Effect: %d\n" ... "War Paint ID: %d\n" ... "War Paint Wear: %d\n" ... "- Killstreak:\n" ... "  - Active: %d\n" ... "  - Tier: %d\n" ... "  - Sheen: %d\n" ... "  - Killstreaker: %d\n" ... "Spells Bitfield: %d\n" ... "\n\n",
+	PrintToConsole(client, "Slot %d:\n" ... "Client ID: %d\n" ... "Class ID: %d\n" ... "Slot ID: %d\n" ... "Active Override: %d\n" ... "Weapon Def Index: %d\n" ... "Stock Def Index: %d\n" ... "Quality: %d\n" ... "Level: %d\n" ... "Australium: %d\n" ... "Festive: %d\n" ... "Unusual Effect: %d\n" ... "War Paint ID: %d\n" ... "War Paint Wear: %f\n" ... "- Killstreak:\n" ... "  - Active: %d\n" ... "  - Tier: %d\n" ... "  - Sheen: %d\n" ... "  - Killstreaker: %d\n" ... "Spells Bitfield: %d\n" ... "\n\n",
 				   slot, g_inventories[client][class][slot].client,
 				   g_inventories[client][class][slot].class, g_inventories[client][class][slot].slotId,
 				   g_inventories[client][class][slot].isActiveOverride, g_inventories[client][class][slot].weaponDefIndex, g_inventories[client][class][slot].stockWeaponDefIndex,
@@ -200,6 +201,60 @@ public Action CMD_TF2ItemPlugin_DebugInventory(int client, int args)
 			Print_Slot(client, i, j);
 		}
 	}
+
+	return Plugin_Handled;
+}
+
+public Action CMD_TF2ItemPlugin_DebugCurrent(int client, int args)
+{
+	int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+
+	if (weapon == 0)
+	{
+		PrintToConsole(client, "No weapon found.");
+		return Plugin_Handled;
+	}
+
+	int	  defIndex = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+
+	// attributes
+	int	  indexes[16];
+	float values[16];
+	TF2Attrib_GetSOCAttribs(weapon, indexes, values);
+
+	PrintToConsole(client, "Current Weapon: %d\n" ... "Item Definition Index: %d\n\n", weapon, defIndex);
+
+	PrintToConsole(client, "SOC Attributes\n\n");
+	for (int i = 0; i < 16; i++)
+	{
+		if (indexes[i] == 0)
+			break;
+
+		PrintToConsole(client, "SOC Attribute %d: %d = %f", i, indexes[i], values[i]);
+	}
+
+	PrintToConsole(client, "Attributes\n\n");
+
+	int attributes[16];
+	int count = TF2Attrib_ListDefIndices(weapon, attributes);
+
+	for (int i = 0; i < count; i++)
+	{
+		if (attributes[i] == 0)
+			continue;
+
+		Address attrib = TF2Attrib_GetByDefIndex(weapon, attributes[i]);
+		float	value  = TF2Attrib_GetValue(attrib);
+
+		PrintToConsole(client, "Attribute %d: %d = %f", i, attributes[i], value);
+	}
+
+	return Plugin_Handled;
+}
+
+public Action CMD_TF2ItemPlugin_ForceCall(int client, int args)
+{
+	SDKCall(hRegen, client, 0);
 
 	return Plugin_Handled;
 }

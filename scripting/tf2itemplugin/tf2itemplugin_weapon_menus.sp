@@ -436,15 +436,15 @@ void TF2ItemPlugin_Menus_SpellsMenu(int client, int slot, char[] name, int weapo
 
 	// Allow Sentry Quad Pumpkins on wrenches.
 	if (StrEqual(weaponClassName, "tf_weapon_wrench") || StrEqual(weaponClassName, "tf_weapon_robot_arm") || StrEqual(weaponClassName, "saxxy") && view_as<TFClassType>(class) == TFClass_Engineer)
-		spellsMenu.AddItem("2", inventory.halloweenSpell.spells & WeaponSpell_SentryQuadPumpkins ? "[X] Sentry Quad Pumpkins" : "[ ] Sentry Quad Pumpkins", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+		spellsMenu.AddItem("2", inventory.halloweenSpell.spells & WeaponSpell_Explosions ? "[X] Sentry Quad Pumpkins" : "[ ] Sentry Quad Pumpkins", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Allow Gourd Grenades on grenade launchers.
 	if (StrEqual(weaponClassName, "tf_weapon_grenadelauncher") || StrEqual(weaponClassName, "tf_weapon_pipebomblauncher") || StrEqual(weaponClassName, "tf_weapon_cannon") && view_as<TFClassType>(class) == TFClass_DemoMan)
-		spellsMenu.AddItem("3", inventory.halloweenSpell.spells & WeaponSpell_GourdGrenades ? "[X] Gourd Grenades" : "[ ] Gourd Grenades", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+		spellsMenu.AddItem("2", inventory.halloweenSpell.spells & WeaponSpell_Explosions ? "[X] Gourd Grenades" : "[ ] Gourd Grenades", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Allow Squash Rockets on rocket launchers.
 	if (StrEqual(weaponClassName, "tf_weapon_rocketlauncher") || StrEqual(weaponClassName, "tf_weapon_rocketlauncher_directhit") || StrEqual(weaponClassName, "tf_weapon_particle_cannon") || StrEqual(weaponClassName, "tf_weapon_rocketlauncher_airstrike") && view_as<TFClassType>(class) == TFClass_Soldier)
-		spellsMenu.AddItem("4", inventory.halloweenSpell.spells & WeaponSpell_SquashRockets ? "[X] Squash Rockets" : "[ ] Squash Rockets", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+		spellsMenu.AddItem("2", inventory.halloweenSpell.spells & WeaponSpell_Explosions ? "[X] Squash Rockets" : "[ ] Squash Rockets", canRenderSelectable ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Configure the menu's options.
 	spellsMenu.ExitBackButton = true;
@@ -668,6 +668,64 @@ void TF2ItemPlugin_Menus_WarPaintMenu_SearchResults(int client, int slot, char[]
 }
 
 /**
+ * Generates a menu for the player to select a specific war paint wear.
+ *
+ * @param client Client index to build the menu for.
+ * @param slot Slot ID to configure.
+ * @param name The name of the selected weapon.
+ * @param weapon Weapon entity index referenced for configuration.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_WarPaintWearMenu(int client, int slot, char[] name, int weapon)
+{
+	// Create the new menu handle.
+	Menu warPaintWearMenu = new Menu(WarPaintWearMenuHandler);
+
+	// Obtain the player's class configuration from their inventory.
+	int class			  = TF2_GetPlayerClassInt(client);
+
+	// Access the inventory configuration.
+	TFInventory_Weapons_Slot inventory;
+	inventory = g_inventories[client][class][slot];
+
+	// Set the menu title.
+	char className[64];
+	TF2ItemPlugin_GetTFClassName(view_as<TFClassType>(class), className, sizeof(className));
+
+	warPaintWearMenu.SetTitle("Weapons / %s / %s / War Paint / Wear", className, name);
+
+	// Hidden properties that transfer data to the menu handler.
+	char weaponStr[12], slotStr[2];
+	Format(weaponStr, sizeof(weaponStr), "%d", weapon);
+	Format(slotStr, sizeof(slotStr), "%d", slot);
+
+	warPaintWearMenu.AddItem(name, "weaponName", ITEMDRAW_IGNORE);
+	warPaintWearMenu.AddItem(weaponStr, "weaponEntityId", ITEMDRAW_IGNORE);
+	warPaintWearMenu.AddItem(slotStr, "weaponSlotId", ITEMDRAW_IGNORE);
+
+	// Add the wear options.
+	for (int i = TF2Weapon_PaintWear_FactoryNew; i <= TF2Weapon_PaintWear_BattleScarred; i++)
+	{
+		// Obtain the wear floating value from the integer.
+		float value = TF2ItemPlugin_GetPaintWearFromIndex(i);
+
+		char  wearName[64], wearIdStr[2];
+		TF2ItemPlugin_GetWarPaintWearString(value, wearName, sizeof(wearName));
+		Format(wearName, sizeof(wearName), value == inventory.warPaintWear ? "[X] %s" : "[ ] %s", wearName);
+		Format(wearIdStr, sizeof(wearIdStr), "%d", i);
+
+		warPaintWearMenu.AddItem(wearIdStr, wearName);
+	}
+
+	// Configure the menu's options.
+	warPaintWearMenu.ExitBackButton = true;
+
+	// Display the menu.
+	warPaintWearMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
  * Rebuilds a menu depending on the origin to make sure changes take effect correctly.
  *
  * @param timer Timer handle that triggered this action.
@@ -697,7 +755,7 @@ public Action TF2ItemPlugin_Menus_HandleMenuRebuild(Handle timer, DataPack data)
 	if (!IsValidEdict(weapon)) return Plugin_Stop;
 
 	// Rebuild the desired menu.
-	if (StrEqual(rebuildAction, "rebuild_weapons") || StrEqual(rebuildAction, "rebuild_unusual")) TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
+	if (StrEqual(rebuildAction, "rebuild_weapons") || StrEqual(rebuildAction, "rebuild_unusual") || StrEqual(rebuildAction, "rebuild_war_paint")) TF2ItemPlugin_Menus_WeaponMenu(client, slot, weaponName, weapon);
 	if (StrEqual(rebuildAction, "rebuild_killstreak")) TF2ItemPlugin_Menus_KillstreakMenu(client, slot, weaponName, weapon);
 	if (StrEqual(rebuildAction, "rebuild_spells")) TF2ItemPlugin_Menus_SpellsMenu(client, slot, weaponName, weapon);
 

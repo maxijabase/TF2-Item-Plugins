@@ -604,6 +604,10 @@ stock void TF2ItemPlugin_ToggleAustralium(int client, int slot)
 	// Toggle the australium status for the slot.
 	g_inventories[client][class][slot].isAustralium = !g_inventories[client][class][slot].isAustralium;
 
+	// If a war paint had been selected, clear it.
+	if (g_inventories[client][class][slot].isAustralium && g_inventories[client][class][slot].warPaintId)
+		TF2ItemPlugin_SetWarPaint(client, slot, -1);
+
 	// Refresh the player's inventory.
 	if (g_inventories[client][class][slot].isActiveOverride)
 		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
@@ -855,6 +859,68 @@ stock void TF2ItemPlugin_SetWarPaint(int client, int slot, int warPaintId)
 
 	// Toggle the war paint override status for the slot.
 	g_inventories[client][class][slot].warPaintId = warPaintId;
+
+	if (warPaintId != -1 && g_inventories[client][class][slot].isAustralium)
+		// If a war paint is set, reset the australium status.
+		TF2ItemPlugin_ToggleAustralium(client, slot);
+
+	// Refresh the player's inventory.
+	if (g_inventories[client][class][slot].isActiveOverride)
+		TF2ItemPlugin_ApplyWeaponChanges(client, slot);
+}
+
+enum
+{
+	TF2Weapon_PaintWear_FactoryNew	  = 0,
+	TF2Weapon_PaintWear_MinimalWear	  = 1,
+	TF2Weapon_PaintWear_FieldTested	  = 2,
+	TF2Weapon_PaintWear_WellWorn	  = 3,
+	TF2Weapon_PaintWear_BattleScarred = 4,
+}
+
+/**
+ * Obtains a wear value from the provided wear index.
+ *
+ * @param index The index to convert.
+ *
+ * @return The floating value to set as an attribute.
+ */
+stock float
+	TF2ItemPlugin_GetPaintWearFromIndex(int index)
+{
+	switch (index)
+	{
+		case TF2Weapon_PaintWear_FactoryNew: return 0.2;
+		case TF2Weapon_PaintWear_MinimalWear: return 0.4;
+		case TF2Weapon_PaintWear_FieldTested: return 0.6;
+		case TF2Weapon_PaintWear_WellWorn: return 0.8;
+		case TF2Weapon_PaintWear_BattleScarred: return 1.0;
+	}
+
+	return -1.0;
+}
+
+/**
+ * Sets a new War Paint wear value for the override.
+ *
+ * @param client Client index to set the war paint wear override status for.
+ * @param slot Slot ID to set the war paint wear override status for.
+ * @param wear The War Paint wear value to set the override to.
+ *
+ * @return void
+ */
+stock void
+	TF2ItemPlugin_SetWarPaintWear(int client, int slot, float wear)
+{
+	// Ensure the slot is within bounds.
+	if (slot < 0 || slot >= MAX_WEAPONS)
+		return;
+
+	// Get the player's class.
+	int class										= TF2_GetPlayerClassInt(client);
+
+	// Set the war paint wear override status for the slot.
+	g_inventories[client][class][slot].warPaintWear = wear;
 
 	// Refresh the player's inventory.
 	if (g_inventories[client][class][slot].isActiveOverride)
@@ -1112,8 +1178,12 @@ stock bool TF2ItemPlugin_TF2Items_ApplyWarPaint(int client, int class, int slot,
 	if (warPaintId == -1)
 		return false;
 
+	// Set the 'item style override' attribute to display the War Paint correctly.
+	TF2Items_SetAttribute(hItem, 1, 2022, 0.0);
+	TF2Items_SetAttribute(hItem, 2, 542, 0.0);
+
 	// Set the item's War Paint.
-	TF2Items_SetAttribute(hItem, 7, 834, float(warPaintId));
+	TF2Items_SetAttribute(hItem, 7, 834, view_as<float>(warPaintId));
 
 	// Obtain the wear value for the override.
 	float wear = g_inventories[client][class][slot].warPaintWear;
@@ -1143,14 +1213,15 @@ stock bool TF2ItemPlugin_TF2Items_ApplyWarPaint(int client, int class, int slot,
  * @param iItemDefinitionIndex The item definition index of the weapon about to be created.
  * @param hItem The item handle to apply the preferences to.
  * @param isCreatingStrangeVariant Optional. If set, will create a new item instance instead of modifying the existing one.
+ * @param flags Optional. The flags to apply to the item.
  *
  * @return `Plugin_Changed` if the item's properties were modified, `Plugin_Handled` if a new creation was instanced and `Plugin_Continue` otherwise.
  */
 stock Action
-	TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class, int slot, char[] className, int iItemDefinitionIndex, Handle& hItem, bool isCreatingStrangeVariant = false)
+	TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(int client, int class, int slot, char[] className, int iItemDefinitionIndex, Handle& hItem, bool isCreatingStrangeVariant = false, int flags = 0)
 {
 	// Create a new item handle.
-	hItem = TF2Items_CreateItem(OVERRIDE_ALL | PRESERVE_ATTRIBUTES);
+	hItem = TF2Items_CreateItem(flags);
 
 	// Obtain the client's inventory instance for this class and slot.
 	TFInventory_Weapons_Slot inventorySlot;
@@ -1158,26 +1229,32 @@ stock Action
 
 	// Set the item's preliminary properties.
 	TF2Items_SetItemIndex(hItem, iItemDefinitionIndex);
+
+	// Set the item's classname.
+	TF2Items_SetClassname(hItem, className);
+
+	// Set the item's level based on the client's preferences.
 	TF2Items_SetLevel(hItem, inventorySlot.level != -1 ? inventorySlot.level : 5);
 
 	// Determine the quality of the item based on set overrides.
 	int quality = TF2ItemPlugin_GetWeaponQuality(client, class, slot);
 
 	// If quality is -1, set the original quality.
-	TF2Items_SetQuality(hItem, quality != -1 ? quality : TF2Quality_Unique);
-
-	// Set the item's classname.
-	TF2Items_SetClassname(hItem, className);
+	TF2Items_SetQuality(hItem, quality != -1 ? quality : (g_inventories[client][class][slot].warPaintId != -1 ? TF2Quality_Decorated : TF2Quality_Unique));
 
 	// Set the maximum amount of attributes possible on the weapon.
 	TF2Items_SetNumAttributes(hItem, 13);
 
+	// Apply the client's preferences to the weapon.
 	TF2ItemPlugin_TF2Items_ApplyAustralium(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyFestive(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyKillstreak(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplySpell(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyUnusualEffect(client, class, slot, hItem, iItemDefinitionIndex);
 	TF2ItemPlugin_TF2Items_ApplyWarPaint(client, class, slot, hItem, iItemDefinitionIndex);
+
+	// Set the generation flags.
+	TF2Items_SetFlags(hItem, flags);
 
 	// If the strange variant is being created, give the named item and properly equip it on the player.
 	if (isCreatingStrangeVariant)
@@ -1229,6 +1306,21 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDe
 	if (!g_inventories[client][class][slot].isActiveOverride)
 		return Plugin_Continue;
 
+	// Declare item flags.
+	int flags = OVERRIDE_ALL | PRESERVE_ATTRIBUTES;
+
+	// If this is the multi-class shotgun, set the classname to the corresponding class shotgun.
+	if (TF2ItemPlugin_GetStrangeVariant(iItemDefinitionIndex) == 199)
+	{
+		switch (view_as<TFClassType>(class))
+		{
+			case TFClass_Soldier: strcopy(classname, 64, "tf_weapon_shotgun_soldier");
+			case TFClass_Pyro: strcopy(classname, 64, "tf_weapon_shotgun_pyro");
+			case TFClass_Heavy: strcopy(classname, 64, "tf_weapon_shotgun_hwg");
+			case TFClass_Engineer: strcopy(classname, 64, "tf_weapon_shotgun_primary");
+		}
+	}
+
 	// If this is an overriden weapon and their item index corresponds to a stock weapon, create a strange variant instead.
 	if (g_inventories[client][class][slot].stockWeaponDefIndex != -1)
 	{
@@ -1254,7 +1346,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDe
 		g_inventories[client][class][slot].stockWeaponDefIndex = -1;
 
 	// Apply the client's preferences to the weapon.
-	return TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(client, class, slot, classname, iItemDefinitionIndex, hItem);
+	return TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(client, class, slot, classname, iItemDefinitionIndex, hItem, false, flags);
 }
 
 public Action TF2ItemPlugin_TF2Items_HandleStockWeaponConversion(Handle timer, DataPack pack)
@@ -1289,7 +1381,7 @@ public Action TF2ItemPlugin_TF2Items_HandleStockWeaponConversion(Handle timer, D
 	Handle hItem = INVALID_HANDLE;
 
 	// Fire a new item modification with the same parameters, but with the creation flag on and the strange variants' definition index.
-	TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(client, class, slot, className, strangeVariantDefinitionIndex, hItem, true);
+	TF2ItemPlugin_TF2Items_ApplyWeaponPreferences(client, class, slot, className, strangeVariantDefinitionIndex, hItem, true, OVERRIDE_ALL | PRESERVE_ATTRIBUTES);
 
 	// Set the original stock weapon definition index to the new item.
 	g_inventories[client][class][slot].stockWeaponDefIndex = iItemDefinitionIndex;
