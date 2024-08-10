@@ -88,6 +88,9 @@ public void OnPluginStart()
 	g_cvar_weapons_searchTimeout		 = CreateConVar("tf2items_weapons_search_timeout", "20.0",
 														"The amount of time in seconds to wait for a search to complete before timing out.", 0, true, 5.0, true, 60.0);
 
+	g_cvar_weapons_databaseCooldown		 = CreateConVar("tf2items_weapons_database_cooldown", "15.0",
+														"The amount of time in seconds to wait before attempting to reconnect to the database. -1 disables the cooldown.", 0, true, -1.0, false);
+
 	// Load the "Regenerate" SDK call.
 	hRegen								 = TF2ItemPlugin_LoadRegenerateSDK();
 
@@ -99,6 +102,9 @@ public void OnPluginStart()
 	static const char commandNames[][24] = { "sm_weapons", "sm_weapon", "sm_wep", "sm_weps" };
 	for (int i = 0; i < sizeof(commandNames); i++)
 		RegAdminCmd(commandNames[i], CMD_TF2ItemPlugin_WeaponManager, ADMFLAG_GENERIC, "Manage weapons on the server.");
+
+	// Connect to the SQlite database.
+	Database.Connect(TF2ItemPlugin_SQL_ConnectToDatabase, "tf2itemplugins_db");
 
 #if defined DEBUG
 	RegAdminCmd("sm_weapons_debug", CMD_TF2ItemPlugin_DebugInventory, ADMFLAG_GENERIC, "Print the player's inventory state.");
@@ -125,6 +131,12 @@ public void OnClientAuthorized(int client)
 {
 	// Initialize the client's inventory.
 	TF2ItemPlugin_InitializeInventory(client);
+
+	// Search for the client's preferences.
+	TF2ItemPlugin_SQL_SearchPlayerPreferences(client);
+
+	// Disable their cooldown flag.
+	g_bIsOnDatabaseCooldown[client] = false;
 }
 
 public Action CMD_TF2ItemPlugin_WeaponManager(int client, int args)

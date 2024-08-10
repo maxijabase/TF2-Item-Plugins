@@ -77,16 +77,74 @@ void TF2ItemPlugin_Menus_MainMenu(int client)
 	main.AddItem(".", "Select a weapon of your choice to begin.", ITEMDRAW_DISABLED);
 
 	// Add options to reset all configurations.
-	main.AddItem("load", "Load my preferences", ITEMDRAW_DISABLED);
-	main.AddItem("save", "Save my preferences", ITEMDRAW_DISABLED);
-	main.AddItem("reset", "Reset all my preferences");
-	main.AddItem("delete", "Delete my saved preferences", ITEMDRAW_DISABLED);
+	main.AddItem("load", "Load my preferences", g_isConnected ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+	main.AddItem("save", "Save my preferences", g_isConnected ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+	main.AddItem("reset", "Reset my current preferences");
+	main.AddItem("delete", "Delete my saved preferences", g_isConnected ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	// Configure the menu's options.
 	main.ExitButton = true;
 
 	// Display the menu.
 	main.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
+ * Builds a minimal menu to confirm the saving of a player's preferences.
+ *
+ * @param client Client index to build the menu for.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_PreferenceSaveMenu(int client)
+{
+	// Construct a new menu instance.
+	Menu saveMenu = new Menu(PreferenceSaveMenuHandler);
+
+	// Set the menu title.
+	saveMenu.SetTitle("Confirm Save");
+
+	saveMenu.AddItem("", "Are you sure you want to save your current preferences?", ITEMDRAW_DISABLED);
+	saveMenu.AddItem("", "This will overwrite your current cloud saved preferences.", ITEMDRAW_DISABLED);
+
+	// Add the confirmation options.
+	saveMenu.AddItem("confirm", "Yes, save them.");
+	saveMenu.AddItem("cancel", "No, thanks.");
+
+	// Configure the menu's options.
+	saveMenu.ExitBackButton = true;
+
+	// Display the menu.
+	saveMenu.Display(client, MENU_TIME_FOREVER);
+}
+
+/**
+ * Builds a minimal menu to confirm the deletion of a player's saved preferences.
+ *
+ * @param client Client index to build the menu for.
+ *
+ * @return void
+ */
+void TF2ItemPlugin_Menus_PreferenceDeleteMenu(int client)
+{
+	// Construct a new menu instance.
+	Menu deleteMenu = new Menu(PreferenceDeleteMenuHandler);
+
+	// Set the menu title.
+	deleteMenu.SetTitle("Confirm Deletion");
+
+	deleteMenu.AddItem("", "Are you sure you want to delete your saved preferences?", ITEMDRAW_DISABLED);
+	deleteMenu.AddItem("", "This action is IRREVERSIBLE.", ITEMDRAW_DISABLED);
+
+	// Add the confirmation options.
+	deleteMenu.AddItem("confirm", "Yes, delete them all.");
+	deleteMenu.AddItem("cancel", "No, thanks.");
+
+	// Configure the menu's options.
+	deleteMenu.ExitBackButton = true;
+
+	// Display the menu.
+	deleteMenu.Display(client, MENU_TIME_FOREVER);
 }
 
 /**

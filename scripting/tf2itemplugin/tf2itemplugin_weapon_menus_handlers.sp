@@ -29,11 +29,92 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int param)
 				return 0;
 			}
 
+			if (StrEqual(weaponEntityStr, "load"))
+			{
+				// Launch a lookup for the player's preferences on SQLite.
+				TF2ItemPlugin_SQL_SearchPlayerPreferences(client);
+
+				// Print a message to their chat to inform them of the load.
+				CPrintToChat(client, "%s Searching for your preferences...", PLUGIN_CHATTAG);
+
+				return 0;
+			}
+
+			if (StrEqual(weaponEntityStr, "save"))
+			{
+				// Open a confirmation dialog.
+				TF2ItemPlugin_Menus_PreferenceSaveMenu(client);
+
+				return 0;
+			}
+
+			if (StrEqual(weaponEntityStr, "delete"))
+			{
+				// Open a confirmation dialog.
+				TF2ItemPlugin_Menus_PreferenceDeleteMenu(client);
+
+				return 0;
+			}
+
 			// Convert the string to an integer.
 			int weaponEntity = StringToInt(weaponEntityStr);
 
 			// Build and open the weapon menu.
 			TF2ItemPlugin_Menus_WeaponMenu(client, param, weaponName, weaponEntity);
+		}
+	}
+
+	return 0;
+}
+
+public int PreferenceSaveMenuHandler(Menu menu, MenuAction action, int client, int param)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			// Obtain the selected option.
+			char option[64];
+			menu.GetItem(param, option, sizeof(option));
+
+			// Handle the selected option.
+			if (StrEqual(option, "confirm"))
+			{
+				// Save the player's preferences to the SQLite database.
+				TF2ItemPlugin_SQL_SavePlayerPreferences(client);
+
+				// Print a message to their chat to inform them of the save.
+				CPrintToChat(client, "%s Saving your preferences...", PLUGIN_CHATTAG);
+
+				return 0;
+			}
+		}
+	}
+
+	return 0;
+}
+
+public int PreferenceDeleteMenuHandler(Menu menu, MenuAction action, int client, int param)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			// Obtain the selected option.
+			char option[64];
+			menu.GetItem(param, option, sizeof(option));
+
+			// Handle the selected option.
+			if (StrEqual(option, "confirm"))
+			{
+				// Delete the player's preferences from the SQLite database.
+				TF2ItemPlugin_SQL_DeletePlayerPreferences(client);
+
+				// Print a message to their chat to inform them of the deletion.
+				CPrintToChat(client, "%s Deleting your preferences...", PLUGIN_CHATTAG);
+
+				return 0;
+			}
 		}
 	}
 

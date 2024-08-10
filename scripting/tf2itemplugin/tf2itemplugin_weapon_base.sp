@@ -28,12 +28,17 @@ Handle					 hRegen = INVALID_HANDLE;
 // Array that stores wether a player is within a spawn room.
 bool					 g_bInSpawnRoom[MAXPLAYERS + 1];
 
+// Array that stores if a client is currently on database cooldown.
+bool					 g_bIsOnDatabaseCooldown[MAXPLAYERS + 1];
+
 /** ConVar that controls if weapon changes are only allowed when the player is within a spawn room. */
 stock ConVar			 g_cvar_weapons_onlySpawn,
 	/** ConVar that indicates the URL where the updated list of TF2 paint kit definitions is. */
 	g_cvar_weapons_paintKitsUrl,
 	/** ConVar that controls the maximum time a user has to search for a war paint name in chat. */
-	g_cvar_weapons_searchTimeout;
+	g_cvar_weapons_searchTimeout,
+	/** ConVar that controls the amount (in seconds) a user has to wait before making another load/save/reset of their preferences. Only works if the database connection is successful. */
+	g_cvar_weapons_databaseCooldown;
 
 /**
  * Obtains the class name of a class ID for visual representation.
