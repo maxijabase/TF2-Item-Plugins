@@ -14,6 +14,8 @@
 #include <tf2attributes>
 #include <tf_econ_data>
 
+#pragma dynamic 131072
+
 #define PLUGIN_CHATTAG "{mythical}[TF2Items]{white}"
 
 #define MAX_WEAPONS	   3
