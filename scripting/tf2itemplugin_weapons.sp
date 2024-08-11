@@ -89,7 +89,7 @@ public void OnPluginStart()
 														"The amount of time in seconds to wait for a search to complete before timing out.", 0, true, 5.0, true, 60.0);
 
 	g_cvar_weapons_databaseCooldown		 = CreateConVar("tf2items_weapons_database_cooldown", "15.0",
-														"The amount of time in seconds to wait before attempting to reconnect to the database. -1 disables the cooldown.", 0, true, -1.0, false);
+														"The amount of time in seconds to wait before a player can perform a database action. -1 disables the cooldown.", 0, true, -1.0, false);
 
 	// Load the "Regenerate" SDK call.
 	hRegen								 = TF2ItemPlugin_LoadRegenerateSDK();
