@@ -1,5 +1,3 @@
-#define MAX_WEAPONS					   3
-#define MAX_CLASSES					   9
 #define MAX_PAINTS					   1024
 
 #define WeaponSpell_Exorcism		   (1 << 0)
@@ -39,32 +37,6 @@ stock ConVar			 g_cvar_weapons_onlySpawn,
 	g_cvar_weapons_searchTimeout,
 	/** ConVar that controls the amount (in seconds) a user has to wait before making another load/save/reset of their preferences. Only works if the database connection is successful. */
 	g_cvar_weapons_databaseCooldown;
-
-/**
- * Obtains the class name of a class ID for visual representation.
- *
- * @param class The `TFClassType` class ID to obtain the name for.
- * @param buffer The buffer to store the class name.
- * @param size The size of the buffer.
- *
- * @return void
- */
-stock void TF2ItemPlugin_GetTFClassName(TFClassType class, char[] buffer, int size)
-{
-	switch (class)
-	{
-		case TFClass_Scout: strcopy(buffer, size, "Scout");
-		case TFClass_Soldier: strcopy(buffer, size, "Soldier");
-		case TFClass_Pyro: strcopy(buffer, size, "Pyro");
-		case TFClass_DemoMan: strcopy(buffer, size, "Demoman");
-		case TFClass_Heavy: strcopy(buffer, size, "Heavy");
-		case TFClass_Engineer: strcopy(buffer, size, "Engineer");
-		case TFClass_Medic: strcopy(buffer, size, "Medic");
-		case TFClass_Sniper: strcopy(buffer, size, "Sniper");
-		case TFClass_Spy: strcopy(buffer, size, "Spy");
-		default: strcopy(buffer, size, "Unknown");
-	}
-}
 
 /**
  * Transforms a stock weapons' definition index into its strange counterpart.
@@ -282,11 +254,12 @@ stock void TF2ItemPlugin_GetHalloweenSpellName(int spell, char[] buffer, int siz
 
 enum
 {
-	TF2WeaponUnusual_None	   = 0,
-	TF2WeaponUnusual_Hot	   = 701,
-	TF2WeaponUnusual_Isotope   = 702,
-	TF2WeaponUnusual_Cool	   = 703,
-	TF2WeaponUnusual_EnergyOrb = 704,
+	TF2WeaponUnusual_None			  = 0,
+	TF2WeaponUnusual_CommunitySparkle = 4,
+	TF2WeaponUnusual_Hot			  = 701,
+	TF2WeaponUnusual_Isotope		  = 702,
+	TF2WeaponUnusual_Cool			  = 703,
+	TF2WeaponUnusual_EnergyOrb		  = 704,
 }
 
 /**
@@ -382,18 +355,6 @@ stock void
 		case 1.0: strcopy(buffer, size, "Battle Scarred");
 		default: strcopy(buffer, size, "Unknown");
 	}
-}
-
-/**
- * Obtains the player class of a client and returns it as an integer.
- *
- * @param client Client index to obtain the class for.
- *
- * @return The player class of the client.
- */
-stock int TF2_GetPlayerClassInt(int client)
-{
-	return view_as<int>(TF2_GetPlayerClass(client));
 }
 
 enum
@@ -960,6 +921,10 @@ enum
 stock int
 	TF2ItemPlugin_GetWeaponQuality(int client, int class, int slot)
 {
+	// If there is a `Community Sparkle` unusual effect set, return the Community quality.
+	if (g_inventories[client][class][slot].unusualEffectId == TF2WeaponUnusual_CommunitySparkle)
+		return TF2Quality_Community;
+
 	// Check if there is a set unusual effect for this slot.
 	if (g_inventories[client][class][slot].unusualEffectId != -1)
 		return TF2Quality_Unusual;

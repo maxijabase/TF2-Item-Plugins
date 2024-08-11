@@ -571,6 +571,14 @@ void TF2ItemPlugin_Menus_UnusualMenu(int client, int slot, char[] name, int weap
 		unusualMenu.AddItem(effectIdStr, effectName, ITEMDRAW_DEFAULT);
 	}
 
+	// Add the Community Sparkle effect as another option.
+	char communitySparkleName[64], communitySparkleEffectIdStr[5];
+	TF2ItemPlugin_GetUnusualEffectName(TF2WeaponUnusual_CommunitySparkle, communitySparkleName, sizeof(communitySparkleName));
+	Format(communitySparkleName, sizeof(communitySparkleName), inventory.unusualEffectId == TF2WeaponUnusual_CommunitySparkle ? "[X] %s" : "[ ] %s", communitySparkleName);
+	Format(communitySparkleEffectIdStr, sizeof(communitySparkleEffectIdStr), "%d", TF2WeaponUnusual_CommunitySparkle);
+
+	unusualMenu.AddItem(communitySparkleEffectIdStr, communitySparkleName, ITEMDRAW_DEFAULT);
+
 	// Configure the menu's options.
 	unusualMenu.ExitBackButton = true;
 
