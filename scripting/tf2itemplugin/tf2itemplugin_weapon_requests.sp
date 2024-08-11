@@ -21,14 +21,14 @@ void TF2ItemPlugin_RequestPaintKitData(const char[] url)
 	SteamWorks_PrioritizeHTTPRequest(req);
 
 	// Print the request status.
-	PrintToServer("[TF2ItemPlugin - Weapons] Paint kit data request %s.", sent ? "sent" : "failed");
+	LogMessage("Paint kit data request %s.", sent ? "sent" : "failed");
 }
 
 public void TF2ItemPlugin_RequestPaintKitData_Callback(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode, any data)
 {
 	if (bFailure || !bRequestSuccessful)
 	{
-		PrintToServer("[TF2ItemPlugin - Weapons] Paint kit data request failed with status code %d", eStatusCode);
+		LogMessage("Paint kit data request failed with status code %d", eStatusCode);
 		return;
 	}
 
@@ -38,7 +38,7 @@ public void TF2ItemPlugin_RequestPaintKitData_Callback(Handle hRequest, bool bFa
 
 	if (bodySize == 0)
 	{
-		PrintToServer("[TF2ItemPlugin - Weapons] Paint kit data request returned an empty response body.");
+		LogMessage("Paint kit data request returned an empty response body.");
 		return;
 	}
 
@@ -52,7 +52,7 @@ public void TF2ItemPlugin_RequestPaintKitData_Callback(Handle hRequest, bool bFa
 	// Must be a valid JSON array, where each object has `id` and `name` keys, or else this will fail.
 	int	   size = json_array_size(json);
 
-	PrintToServer("[TF2ItemPlugin - Weapons] Received paint kit data with %d entries.", size);
+	LogMessage("Received paint kit data with %d entries.", size);
 
 	// Iterate over each paint kit entry.
 	for (int i = 0; i < size; i++)
@@ -78,5 +78,5 @@ public void TF2ItemPlugin_RequestPaintKitData_Callback(Handle hRequest, bool bFa
 	// Free the JSON object from memory.
 	delete json;
 
-	PrintToServer("[TF2ItemPlugin - Weapons] Paint kit data has been successfully loaded.");
+	LogMessage("Paint kit data has been successfully loaded.");
 }

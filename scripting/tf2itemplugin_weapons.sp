@@ -122,7 +122,7 @@ public void OnMapStart()
 	char url[512];
 	g_cvar_weapons_paintKitsUrl.GetString(url, sizeof(url));
 
-	PrintToServer("[TF2ItemPlugin - Weapons] Requesting paint kit data from %s", url);
+	LogMessage("Requesting paint kit data from %s", url);
 
 	TF2ItemPlugin_RequestPaintKitData(url);
 }

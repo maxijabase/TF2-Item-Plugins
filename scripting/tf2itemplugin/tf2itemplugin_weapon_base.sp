@@ -1294,8 +1294,6 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] classname, int iItemDe
 	// If this is an overriden weapon and their item index corresponds to a stock weapon, create a strange variant instead.
 	if (g_inventories[client][class][slot].stockWeaponDefIndex != -1)
 	{
-		PrintToServer("DEBUG: %d requires conversion.", iItemDefinitionIndex);
-
 		// Create a `DataPack` to transfer the necessary information to the next frame.
 		DataPack data = new DataPack();
 		data.WriteCell(client);
@@ -1340,7 +1338,7 @@ public Action TF2ItemPlugin_TF2Items_HandleStockWeaponConversion(Handle timer, D
 	// If an invalid item definition index was returned, return the default action and continue.
 	if (strangeVariantDefinitionIndex == -1)
 	{
-		PrintToServer("FATAL ERROR: For client %d obtained item def index %d but could not find a valid strange variant (%d)", client, iItemDefinitionIndex, strangeVariantDefinitionIndex);
+		LogError("FATAL ERROR: For client %d obtained item def index %d but could not find a valid strange variant (%d)", client, iItemDefinitionIndex, strangeVariantDefinitionIndex);
 
 		delete pack;
 
