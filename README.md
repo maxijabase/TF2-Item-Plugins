@@ -23,9 +23,9 @@ Feel free to use these plugins wherever you want.
 
 **This plugin makes use of the ``m_bValidatedAttachedEntity`` networked property, which bypasses the restriction made by VALVe where fake items are invisible to others. Everyone on the server will be able to see your items with these plugins.**
 
-## Requirements
+## Pre-requisites
 
-The plugins depend on the following extensions/plugins to be installed on your server:
+The plugins depend on the following extensions/plugins to be installed **and be working** on your server:
 * [TF2Items (1.6.4-279)](https://forums.alliedmods.net/showthread.php?t=115100)
 * [TF2Attributes](https://github.com/FlaminSarge/tf2attributes)
 * [TFEconData](https://github.com/nosoop/SM-TFEconData)
@@ -51,3 +51,24 @@ To enable **preference saving** which is a feature that comes with the plugin pa
 }
 ```
 
+If you have installed the requirements correctly, and made sure they run on your server as expected, you can now proceed to do the following:
+1. Download the latest release from [**right here**](https://github.com/punteroo/TF2-Item-Plugins/releases/latest).
+2. Unpack both `.smx` files from the `plugins` folder inside into your `tf/sourcemod/plugins` server folder.
+3. Restart your server.
+
+**Be warned**: Loading/reloading these plugins manually via server console could cause issues. **YOU HAVE BEEN WARNED**.
+
+Do not use the provided `gamedata` in this repository's source code, as it could be outdated in regards to the original repository.
+
+## ConVars
+### `tf2itemplugin_weapons`
+- `tf2items_weapons_spawnonly`: Controls if weapon changes can only be made within spawn areas. Defaults to `0.0` (allow anywhere).
+- `tf2items_weapons_paintkits_url`: An URL with a raw JSON file that holds all paint kits in the game along their names. If you want to use your own, make sure your server replies with the raw content and follows the schema. By default this is set to my provided file. **I am not responsible if War Paint options don't load when you change this.**
+- `tf2items_weapons_search_timeout`: Amount of time in seconds to allow players to look up War Paint names before re-enabling them to chat. Defaults to `20.0` seconds.
+- `tf2items_weapons_database_cooldown`: Amount of time in seconds a player must wait after perfoming a database operation (saving/loading/deleting preferences). Defaults to `15.0` seconds.
+
+### `tf2itemplugin_cosmetics`
+- `tf2items_cosmetics_spawn_only`: Same as weapons, but for cosmetics. Defaults to `0.0` (allow anywhere).
+- `tf2items_cosmetics_unusuals_url`: An URL with a raw JSON file that holds all Unusual effects in the game currently along their names. If you want to use your own, make sure your server replies with the raw content and follows the schema. By default this is set to my provided file. **I am not responsible if Unusual options don't load when you change this.**
+- `tf2items_cosmetics_search_timeout`: Same as weapons, but for when searching Unusual effects. Defaults to `15.0` seconds.
+- `tf2items_cosmetics_database_cooldown`: Same as weapons, but for cosmetic preferences.
