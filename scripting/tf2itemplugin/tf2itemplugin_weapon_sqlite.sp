@@ -4,6 +4,31 @@ Database		  g_db_weapons	= null;
 
 bool			  g_isConnected = false;
 
+/**
+	"CREATE TABLE IF NOT EXISTS tf2itemplugin_weapons (" ...
+		"steam_id VARCHAR(64) NOT NULL," ...
+		"class INTEGER NOT NULL," ...
+		"slotId INTEGER NOT NULL," ...
+		"isActiveOverride INTEGER NOT NULL," ...
+		"weaponDefIndex INTEGER NOT NULL," ...
+		"stockWeaponDefIndex INTEGER NOT NULL," ...
+		"quality INTEGER NOT NULL," ...
+		"level INTEGER NOT NULL," ...
+		"isAustralium INTEGER NOT NULL," ...
+		"isFestive INTEGER NOT NULL," ...
+		"warPaintId INTEGER NOT NULL," ...
+		"warPaintWear REAL NOT NULL," ...
+		"unusualEffectId INTEGER NOT NULL," ...
+		"halloweenSpellIsActive INTEGER NOT NULL," ...
+		"halloweenSpellSpells INTEGER NOT NULL," ...
+		"killstreakIsActive INTEGER NOT NULL," ...
+		"killstreakTier INTEGER NOT NULL," ...
+		"killstreakSheen INTEGER NOT NULL," ...
+		"killstreakKillstreaker INTEGER NOT NULL," ...
+		"PRIMARY KEY (steam_id, class, slotId)" ...
+	");";
+ */
+
 static const char sqlite_schema_tf2itemplugin_weapons[512] =
 	"CREATE TABLE IF NOT EXISTS tf2itemplugin_weapons (" ... "steam_id VARCHAR(64) NOT NULL," ... "class INTEGER NOT NULL," ... "slotId INTEGER NOT NULL," ... "isActiveOverride INTEGER NOT NULL," ... "weaponDefIndex INTEGER NOT NULL," ... "stockWeaponDefIndex INTEGER NOT NULL," ... "quality INTEGER NOT NULL," ... "level INTEGER NOT NULL," ... "isAustralium INTEGER NOT NULL," ... "isFestive INTEGER NOT NULL," ... "warPaintId INTEGER NOT NULL," ... "warPaintWear REAL NOT NULL," ... "unusualEffectId INTEGER NOT NULL," ... "halloweenSpellIsActive INTEGER NOT NULL," ... "halloweenSpellSpells INTEGER NOT NULL," ... "killstreakIsActive INTEGER NOT NULL," ... "killstreakTier INTEGER NOT NULL," ... "killstreakSheen INTEGER NOT NULL," ... "killstreakKillstreaker INTEGER NOT NULL," ... "PRIMARY KEY (steam_id, class, slotId)" ... ");";
 
@@ -12,7 +37,7 @@ public void TF2ItemPlugin_SQL_ConnectToDatabase(Database db, const char[] error,
 	// If no database object was found, preference saving is now disabled.
 	if (db == null)
 	{
-		LogError("[TF2ItemPlugin - Weapons] FATAL ERROR: Could not connect to SQLite database. Preference saving/loading will be disabled until a plugin reload is made.");
+		LogError("FATAL ERROR: Could not connect to SQLite database. Preference saving/loading will be disabled until a plugin reload is made.");
 		g_isConnected = false;
 
 		return;
@@ -26,18 +51,18 @@ public void TF2ItemPlugin_SQL_ConnectToDatabase(Database db, const char[] error,
 	g_db_weapons.Query(TF2ItemPlugin_SQLCallback_NullQueryResults, sqlite_schema_tf2itemplugin_weapons);
 
 	// Log the result.
-	LogMessage("[TF2ItemPlugin - Weapons] Connected successfully to database.");
+	LogMessage("Connected successfully to database.");
 }
 
 public void TF2ItemPlugin_SQLCallback_NullQueryResults(Database db, DBResultSet results, const char[] error, any data)
 {
 	if (db == null || results == null)
 	{
-		LogError("[TF2ItemPlugin - Weapons] Query has failed: \"%s\"", error);
+		LogError("Query has failed: \"%s\"", error);
 		return;
 	}
 
-	LogMessage("[TF2ItemPlugin - Weapons] Query has been executed successfully.");
+	LogMessage("Query has been executed successfully.");
 
 	// Nullify the results handle.
 	delete results;
@@ -59,6 +84,12 @@ stock void TF2ItemPlugin_SQL_SearchPlayerPreferences(int client)
 		return;
 	}
 
+	if (!g_isConnected)
+	{
+		LogError("Database connection is not established. Ignoring search request.");
+		return;
+	}
+
 	// Obtain the client's Steam2 ID.
 	char steamId[64];
 	GetClientAuthId(client, AuthId_Steam2, steamId, sizeof(steamId));
@@ -69,7 +100,7 @@ stock void TF2ItemPlugin_SQL_SearchPlayerPreferences(int client)
 						"SELECT * FROM tf2itemplugin_weapons WHERE steam_id = '%s'",
 						steamId);
 
-	LogMessage("[TF2ItemPlugin - Weapons] Searching for preferences for user %s", steamId);
+	LogMessage("Searching for preferences for user %s", steamId);
 
 	g_db_weapons.Query(TF2ItemPlugin_SQLCallback_PreferenceSearch, query, GetClientUserId(client));
 }
@@ -78,7 +109,7 @@ public void TF2ItemPlugin_SQLCallback_PreferenceSearch(Database db, DBResultSet 
 {
 	if (db == null || results == null)
 	{
-		LogError("[TF2ItemPlugin - Weapons] Preference search query has failed: \"%s\"", error);
+		LogError("Preference search query has failed: \"%s\"", error);
 		return;
 	}
 
@@ -92,7 +123,7 @@ public void TF2ItemPlugin_SQLCallback_PreferenceSearch(Database db, DBResultSet 
 		if (IsClientInGame(client))
 			CPrintToChat(client, "%s You have no saved preferences on this server.", PLUGIN_CHATTAG);
 
-		LogMessage("[TF2ItemPlugin - Weapons] No preferences found for user %d", userId);
+		LogMessage("No preferences found for user %d", userId);
 		return;
 	}
 
@@ -177,7 +208,7 @@ public void TF2ItemPlugin_SQLCallback_PreferenceSearch(Database db, DBResultSet 
 	if (IsClientInGame(client))
 		CPrintToChat(client, "%s %d preferences have been loaded. Changes will take effect on next respawn.", PLUGIN_CHATTAG, results.RowCount);
 
-	LogMessage("[TF2ItemPlugin - Weapons] Loaded %d preferences for user %d", results.RowCount, userId);
+	LogMessage("Loaded %d preferences for user %d", results.RowCount, userId);
 }
 
 /**
@@ -193,6 +224,12 @@ stock void TF2ItemPlugin_SQL_SavePlayerPreferences(int client)
 	if (g_bIsOnDatabaseCooldown[client])
 	{
 		CPrintToChat(client, "%s You are currently on cooldown. Please wait a moment before trying again.", PLUGIN_CHATTAG);
+		return;
+	}
+
+	if (!g_isConnected)
+	{
+		LogError("Database connection is not established. Ignoring save request.");
 		return;
 	}
 
@@ -218,7 +255,7 @@ stock void TF2ItemPlugin_SQL_SavePlayerPreferences(int client)
 								"INSERT INTO tf2itemplugin_weapons (steam_id, class, slotId, isActiveOverride, weaponDefIndex, stockWeaponDefIndex, quality, level, isAustralium, isFestive, warPaintId, warPaintWear, unusualEffectId, halloweenSpellIsActive, halloweenSpellSpells, killstreakIsActive, killstreakTier, killstreakSheen, killstreakKillstreaker) VALUES ('%s', %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %f, %d, %d, %d, %d, %d, %d, %d)",
 								steamId, class, slot, inventory.isActiveOverride, inventory.weaponDefIndex, inventory.stockWeaponDefIndex, inventory.quality, inventory.level, inventory.isAustralium, inventory.isFestive, inventory.warPaintId, inventory.warPaintWear, inventory.unusualEffectId, inventory.halloweenSpell.isActive, inventory.halloweenSpell.spells, inventory.killstreak.isActive, inventory.killstreak.tier, inventory.killstreak.sheen, inventory.killstreak.killstreaker);
 
-			LogMessage("[TF2ItemPlugin - Weapons] Saving preferences for user %s", steamId);
+			LogMessage("Saving preferences for user %s", steamId);
 
 			g_db_weapons.Query(TF2ItemPlugin_SQLCallback_NullQueryResults, query, client);
 		}
@@ -234,7 +271,7 @@ stock void TF2ItemPlugin_SQL_SavePlayerPreferences(int client)
 	if (IsClientInGame(client))
 		CPrintToChat(client, "%s Your preferences have been saved.", PLUGIN_CHATTAG);
 
-	LogMessage("[TF2ItemPlugin - Weapons] Saved preferences for user %s", steamId);
+	LogMessage("Saved preferences for user %s", steamId);
 }
 
 /**
@@ -246,6 +283,12 @@ stock void TF2ItemPlugin_SQL_SavePlayerPreferences(int client)
  */
 stock void TF2ItemPlugin_SQL_DeletePlayerPreferences(int client, bool silent = false)
 {
+	if (!g_isConnected)
+	{
+		LogError("Database connection is not established. Ignoring delete request.");
+		return;
+	}
+
 	// Create a query string to delete all preferences for this user.
 	char steamId[64];
 	GetClientAuthId(client, AuthId_Steam2, steamId, sizeof(steamId));
@@ -255,7 +298,7 @@ stock void TF2ItemPlugin_SQL_DeletePlayerPreferences(int client, bool silent = f
 						"DELETE FROM tf2itemplugin_weapons WHERE steam_id = '%s'",
 						steamId);
 
-	LogMessage("[TF2ItemPlugin - Weapons] Deleting preferences for user %s", steamId);
+	LogMessage("Deleting preferences for user %s", steamId);
 
 	g_db_weapons.Query(TF2ItemPlugin_SQLCallback_NullQueryResults, query, client);
 

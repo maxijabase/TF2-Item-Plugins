@@ -9,7 +9,7 @@
 #pragma newdecls required
 
 #define PLUGIN_VERSION "4.0.0"
-#define DEBUG		   true
+#define DEBUG		   false
 
 public Plugin myinfo =
 {
@@ -61,8 +61,12 @@ public void TF2ItemPlugin_AttachSpawnRoomHooks()
 
 public Action OnStartTouchSpawnRoom(int entity, int other)
 {
+	// Is this entity a player?
+	if (!IsClientInGame(other))
+		return Plugin_Continue;
+
 	// If player is alive and real, mark them as in spawn room.
-	if (IsClientInGame(other) && IsPlayerAlive(other) && !IsClientSourceTV(other) && !IsClientObserver(other) && other <= MaxClients)
+	if (IsPlayerAlive(other) && !IsClientSourceTV(other) && !IsClientObserver(other) && other <= MaxClients)
 		g_bInSpawnRoom[GetClientOfUserId(other)] = true;
 
 	return Plugin_Continue;
@@ -70,8 +74,12 @@ public Action OnStartTouchSpawnRoom(int entity, int other)
 
 public Action OnEndTouchSpawnRoom(int entity, int other)
 {
+	// Is this entity a player?
+	if (!IsClientInGame(other))
+		return Plugin_Continue;
+
 	// If player is alive and real, mark them as not in spawn room.
-	if (IsClientInGame(other) && IsPlayerAlive(other) && !IsClientSourceTV(other) && !IsClientObserver(other))
+	if (IsPlayerAlive(other) && !IsClientSourceTV(other) && !IsClientObserver(other))
 		g_bInSpawnRoom[GetClientOfUserId(other)] = false;
 
 	return Plugin_Continue;
@@ -82,7 +90,7 @@ public void OnPluginStart()
 	g_cvar_weapons_onlySpawn			 = CreateConVar("tf2items_weapons_spawnonly", "0.0",
 														"If enabled, weapon changes are only allowed when the player is within a spawn room.", 0, true, 0.0, true, 1.0);
 
-	g_cvar_weapons_paintKitsUrl			 = CreateConVar("tf2items_weapons_paintkits_url", "https://raw.githubusercontent.com/punteroo/TF2-Item-Plugins/feat/rewrite/tf2_protos.json",
+	g_cvar_weapons_paintKitsUrl			 = CreateConVar("tf2items_weapons_paintkits_url", "https://raw.githubusercontent.com/punteroo/TF2-Item-Plugins/production/tf2_protos.json",
 														"The URL to the JSON file containing the War Paints and their IDs. Must be a valid JSON array.");
 
 	g_cvar_weapons_searchTimeout		 = CreateConVar("tf2items_weapons_search_timeout", "20.0",
