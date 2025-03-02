@@ -115,9 +115,11 @@ public void OnPluginStart()
     ammoOff                            = FindSendPropInfo("CTFPlayer", "m_iAmmo");
 
     // Register the cosmetic manager commands.
-    static const char commandNames[][24] = { "sm_hats", "sm_hat", "sm_cosmetics", "sm_cosmetic", "sm_myhats" };
-    for (int i = 0; i < sizeof(commandNames); i++)
-        RegAdminCmd(commandNames[i], CMD_TF2ItemPlugin_CosmeticManager, ADMFLAG_GENERIC, "Manage your cosmetics on the server.");
+    RegConsoleCmd("sm_hats", CMD_TF2ItemPlugin_CosmeticManager, "Manage your cosmetics on the server.");
+    RegConsoleCmd("sm_hat", CMD_TF2ItemPlugin_CosmeticManager, "Manage your cosmetics on the server.");
+    RegConsoleCmd("sm_cosmetics", CMD_TF2ItemPlugin_CosmeticManager, "Manage your cosmetics on the server.");
+    RegConsoleCmd("sm_cosmetic", CMD_TF2ItemPlugin_CosmeticManager, "Manage your cosmetics on the server.");
+    RegConsoleCmd("sm_myhats", CMD_TF2ItemPlugin_CosmeticManager, "Manage your cosmetics on the server.");
 
     // Connect to the SQlite database.
     Database.Connect(TF2ItemPlugin_SQL_ConnectToDatabase, "tf2itemplugins_db");
